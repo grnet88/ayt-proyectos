@@ -1,0 +1,154 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>AyT Proyectos</title>
+  <link rel="stylesheet" href="/static/vendor/leaflet/leaflet.css">
+  <link rel="stylesheet" href="/static/vendor/geoman/leaflet-geoman.css">
+  <link rel="stylesheet" href="/static/estilos.css">
+</head>
+<body>
+  <header>
+    <strong class="marca">AyT Proyectos</strong>
+    <select id="sel-proyecto" title="Proyecto"></select>
+    <button id="btn-nuevo">Nuevo</button>
+    <input id="inp-nombre" placeholder="Nombre del proyecto">
+    <input id="inp-cliente" placeholder="Cliente">
+    <select id="sel-categoria" title="Categoría">
+      <option value="">Categoría…</option>
+      <option>Barrios Privados</option>
+      <option>Empresas</option>
+      <option>Parques Industriales</option>
+      <option>Otro</option>
+    </select>
+    <span id="estado" class="estado"></span>
+    <span class="espacio"></span>
+    <button id="btn-catalogo">Catálogo</button>
+    <a id="lnk-csv" class="boton" href="#" download>Exportar listado</a>
+    <button id="btn-borrar" class="peligro" title="Borrar proyecto">Borrar</button>
+  </header>
+
+  <main>
+    <aside id="panel-izq">
+      <section>
+        <h3>Ubicación</h3>
+        <form id="frm-buscar" class="fila">
+          <input id="inp-buscar" placeholder="Dirección o lat, lon">
+          <button>Ir</button>
+        </form>
+      </section>
+
+      <section>
+        <h3>Dibujar</h3>
+        <div class="herramientas">
+          <button data-herr="perimetro">Perímetro cerrado</button>
+          <button data-herr="perimetro-abierto">Perímetro abierto</button>
+          <button data-herr="camara">Cámara</button>
+          <button data-herr="gabinete">Gabinete</button>
+          <button data-herr="central">Rack central</button>
+          <button data-herr="ups">Fuente / UPS</button>
+        </div>
+        <p class="ayuda" id="ayuda-herr">Elegí una herramienta y hacé clic en el mapa. Los elementos se pueden arrastrar.</p>
+      </section>
+
+      <section>
+        <h3>Distribuir sobre el perímetro</h3>
+        <label>Modelo de cámara <select id="dist-modelo"></select></label>
+        <label>Espaciado (m) <input id="dist-esp" type="number" step="0.5" placeholder="automático"></label>
+        <label>Cámaras por gabinete <input id="dist-cpg" type="number" min="1" value="4"></label>
+        <label>Orientación
+          <select id="dist-sentido">
+            <option value="trazado">En el sentido del dibujo</option>
+            <option value="inverso">Contra el sentido del dibujo</option>
+          </select>
+        </label>
+        <button id="btn-distribuir" class="primario">Distribuir cámaras y gabinetes</button>
+        <p class="ayuda">Reemplaza solo lo generado automáticamente. Lo que ubicaste a mano se mantiene.</p>
+      </section>
+
+      <section>
+        <h3>Parámetros de cálculo</h3>
+        <div id="parametros"></div>
+      </section>
+    </aside>
+
+    <div id="mapa"></div>
+
+    <aside id="panel-der">
+      <section id="inspector" hidden>
+        <h3>Elemento seleccionado</h3>
+        <div id="inspector-cuerpo"></div>
+      </section>
+      <section>
+        <h3>Resultados</h3>
+        <label class="check"><input type="checkbox" id="chk-coberturas" checked> Mostrar coberturas</label>
+        <label class="check"><input type="checkbox" id="chk-huecos" checked> Marcar puntos ciegos</label>
+        <div id="resultados"><p class="ayuda">Dibujá un perímetro para empezar.</p></div>
+      </section>
+    </aside>
+  </main>
+
+  <dialog id="dlg-catalogo">
+    <div class="dlg-cab">
+      <h2>Catálogo de equipos</h2>
+      <button id="btn-cerrar-cat">Cerrar</button>
+    </div>
+    <div class="dlg-cuerpo">
+      <div id="tabla-catalogo"></div>
+      <form id="frm-modelo">
+        <h3 id="frm-modelo-titulo">Agregar modelo</h3>
+        <input type="hidden" name="id">
+        <label>Categoría
+          <select name="categoria">
+            <option value="camara">Cámara</option>
+            <option value="switch">Switch</option>
+            <option value="ups">UPS</option>
+            <option value="onu">ONU</option>
+            <option value="olt">OLT</option>
+            <option value="router">Router</option>
+          </select>
+        </label>
+        <label>Marca <input name="marca"></label>
+        <label>Modelo <input name="modelo" required></label>
+        <fieldset data-cat="camara">
+          <label>Tipo
+            <select name="tipo"><option value="domo_fijo">Fija</option><option value="ptz">PTZ</option>
+              <option value="lpr">LPR</option><option value="termica">Térmica</option></select>
+          </label>
+          <label>Lente (mm) <input name="lente_mm" type="number" step="0.1"></label>
+          <label>Ángulo horizontal (°) <input name="hfov" type="number" step="0.1"></label>
+          <label>Ángulo vertical (°) <input name="vfov" type="number" step="0.1"></label>
+          <label>DORI detección (m) <input name="dori_d" type="number" step="0.1"></label>
+          <label>DORI observación (m) <input name="dori_o" type="number" step="0.1"></label>
+          <label>DORI reconocimiento (m) <input name="dori_r" type="number" step="0.1"></label>
+          <label>DORI identificación (m) <input name="dori_i" type="number" step="0.1"></label>
+          <label>Alcance IR (m) <input name="ir_m" type="number" step="0.1"></label>
+          <label>Alcance para analítica (m) <input name="alcance_analitica_m" type="number" step="0.1"></label>
+          <label>Bitrate (Mbps) <input name="bitrate_mbps" type="number" step="0.1"></label>
+        </fieldset>
+        <fieldset data-cat="switch">
+          <label>Puertos PoE <input name="puertos_poe" type="number"></label>
+          <label>Presupuesto PoE (W) <input name="budget_w" type="number"></label>
+          <label>Uso
+            <select name="uso"><option value="gabinete">Gabinete</option><option value="core">Core</option></select>
+          </label>
+        </fieldset>
+        <fieldset data-cat="ups">
+          <label>Potencia (VA) <input name="potencia_va" type="number"></label>
+        </fieldset>
+        <label>Consumo (W) <input name="consumo_w" type="number" step="0.1"></label>
+        <div class="fila">
+          <button class="primario">Guardar</button>
+          <button type="button" id="btn-modelo-limpiar">Limpiar</button>
+        </div>
+        <p class="ayuda">Los modelos base se pueden duplicar y ajustar. Los cargados por vos se pueden editar o borrar.</p>
+      </form>
+    </div>
+  </dialog>
+
+  <script src="/static/vendor/leaflet/leaflet.js"></script>
+  <script src="/static/vendor/geoman/leaflet-geoman.min.js"></script>
+  <script src="/static/app.js"></script>
+</body>
+</html>
