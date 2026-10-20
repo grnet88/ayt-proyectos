@@ -1,7 +1,7 @@
 import json
 from pathlib import Path
 
-from test_auth_api import cliente, configurar, ingresar  # noqa: F401
+from .test_auth_api import cliente, configurar, ingresar  # noqa: F401
 
 APP = Path(__file__).parents[1] / "app"
 CATALOGO = json.loads((APP / "catalogo_base.json").read_text(encoding="utf-8"))

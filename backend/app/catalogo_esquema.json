@@ -10,6 +10,7 @@
     {"id": "camara", "nombre": "Cámara", "grupo": "CCTV", "orientable": true, "campos": [
       {"clave": "tipo", "etiqueta": "Tipo", "tipo": "opcion", "opciones": [["domo_fijo", "Fija"], ["ptz", "PTZ"], ["lpr", "LPR"], ["termica", "Térmica"]]},
       {"clave": "lente_mm", "etiqueta": "Lente", "tipo": "num", "unidad": "mm", "paso": 0.1},
+      {"clave": "resolucion_h", "etiqueta": "Resolución horizontal", "tipo": "num", "unidad": "px"},
       {"clave": "hfov", "etiqueta": "Ángulo horizontal", "tipo": "num", "unidad": "°", "paso": 0.1, "resumen": true},
       {"clave": "vfov", "etiqueta": "Ángulo vertical", "tipo": "num", "unidad": "°", "paso": 0.1},
       {"clave": "dori.d", "etiqueta": "DORI detección", "tipo": "num", "unidad": "m", "paso": 0.1},

@@ -21,8 +21,11 @@ def test_inclinacion_automatica_lleva_el_borde_superior_al_alcance():
     assert o["alcance_efectivo_m"] == pytest.approx(36.4)
     # zona ciega: 4 / tan(33,77 + 27,5)
     assert o["zona_ciega_m"] == pytest.approx(4 / math.tan(math.radians(61.27)), abs=0.1)
-    # PPM por DORI: 250 PPM a 9,1 m → 62,5 a 36,4 m
-    assert o["ppm_borde"] == pytest.approx(62.5, abs=0.1)
+    # PPM con la resolución del catálogo (3840 px): 3840 / (2 · 36,4 · tan 53°)
+    assert o["ppm_borde"] == pytest.approx(39.7, abs=0.1)
+    # sin resolución, estimado por DORI: 250 PPM a 9,1 m → 62,5 a 36,4 m
+    sin_res = {k: v for k, v in CAM.items() if k != "resolucion_h"}
+    assert optica({}, sin_res, P)["ppm_borde"] == pytest.approx(62.5, abs=0.1)
 
 
 def test_inclinacion_manual_acorta_el_alcance():
