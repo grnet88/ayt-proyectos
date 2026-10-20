@@ -80,6 +80,14 @@
         </form>
       </section>
 
+      <section>
+        <h3>Planos</h3>
+        <div id="lista-planos"></div>
+        <label class="boton edicion cargar-plano">Cargar plano (PNG, JPG o PDF)
+          <input type="file" id="inp-plano" accept=".png,.jpg,.jpeg,.pdf,image/png,image/jpeg,application/pdf" hidden></label>
+        <p class="ayuda" id="ayuda-plano"></p>
+      </section>
+
       <section class="edicion">
         <h3>Dibujar</h3>
         <div class="herramientas">
@@ -243,5 +251,6 @@
   <script src="/static/vendor/leaflet/leaflet.js"></script>
   <script src="/static/vendor/geoman/leaflet-geoman.min.js"></script>
   <script src="/static/app.js"></script>
+  <script src="/static/planos.js"></script>
 </body>
 </html>

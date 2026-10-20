@@ -23,6 +23,14 @@
 Probado: 14 pruebas automáticas y recorrido completo en navegador (configuración, llave, ingreso,
 distribución, duplicar escenario, usuario visor de solo lectura, recuperación y rechazo de la llave usada).
 
+## Etapa 1, parte 2: planos superpuestos (2026-10-20)
+
+- Sección **Planos**: cargar PNG, JPG o PDF (se usa la primera página, renderizada en el navegador con
+  pdf.js, incluido en `frontend/vendor/pdfjs`). Los archivos quedan en `datos/planos/<proyecto>/`.
+- Se ubica con **calibración de 2 puntos**: un punto del plano y el mismo en el satélite, dos veces.
+  Calcula escala y giro (similitud). Transparencia regulable, se puede ocultar o borrar.
+- Cada plano pertenece a una planta (por ahora Exterior); sirve también para plantas interiores más adelante.
+
 ## Etapa 1, parte 1: óptica y obstáculos (2026-10-20)
 
 - Cada cámara tiene altura (`altura_m`, por defecto 4 m) e inclinación (`inclinacion`, grados bajo la horizontal).

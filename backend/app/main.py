@@ -4,8 +4,13 @@ Ejecutar desde la carpeta backend:  uvicorn app.main:app --reload
 """
 from __future__ import annotations
 
+import base64
 import csv
 import io
+import mimetypes
+import re
+import shutil
+import uuid
 from pathlib import Path
 
 from fastapi import Depends, FastAPI, HTTPException, Request, Response
@@ -16,6 +21,12 @@ from . import auth, db
 from .engine.calculo import PARAMETROS_DEFAULT, calcular, distribuir_perimetro
 
 FRONTEND = Path(__file__).resolve().parents[2] / "frontend"
+# Windows puede registrar .js como text/plain y el navegador rechaza los módulos (pdf.js)
+mimetypes.add_type("text/javascript", ".js")
+mimetypes.add_type("text/javascript", ".mjs")
+TIPOS_PLANO = {b"\x89PNG": ("png", "image/png"), b"\xff\xd8\xff": ("jpg", "image/jpeg")}
+MAX_PLANO = 30 * 1024 * 1024
+ARCHIVO_PLANO = re.compile(r"^[0-9a-f]{12}\.(png|jpg)$")
 COOKIE = "ayt_sesion"
 LOCALES = {"127.0.0.1", "::1", "localhost", "testclient"}
 
@@ -231,6 +242,7 @@ def put_proyecto(pid: str, datos: dict, u: dict = Depends(editor)):
 def delete_proyecto(pid: str, u: dict = Depends(editor)):
     p = _proyecto(pid, u)
     db.borrar_proyecto(pid)
+    shutil.rmtree(_carpeta_planos(pid), ignore_errors=True)
     db.auditar(u["usuario"], "borrar_proyecto", p["nombre"])
     return {"ok": True}
 
@@ -243,6 +255,59 @@ def post_escenario(pid: str, datos: dict, u: dict = Depends(editor)):
     if not e:
         raise HTTPException(400, "No se pudo crear el escenario")
     return e
+
+
+# --------------------------------------------------------------------------- planos (imágenes superpuestas)
+
+
+def _carpeta_planos(pid: str) -> Path:
+    return db.RUTA_DB.parent / "planos" / pid
+
+
+@app.post("/api/proyectos/{pid}/planos")
+def post_plano(pid: str, datos: dict, u: dict = Depends(editor)):
+    """Recibe la imagen como data URL (PNG o JPG; los PDF se convierten a PNG en el navegador)."""
+    p = _proyecto(pid, u)
+    try:
+        crudo = base64.b64decode((datos.get("imagen") or "").split(",", 1)[-1], validate=True)
+    except ValueError:
+        raise HTTPException(422, "Imagen inválida")
+    if len(crudo) > MAX_PLANO:
+        raise HTTPException(413, "El plano supera los 30 MB")
+    tipo = next((t for firma, t in TIPOS_PLANO.items() if crudo.startswith(firma)), None)
+    if not tipo:
+        raise HTTPException(422, "El plano debe ser PNG o JPG")
+    fid = uuid.uuid4().hex[:12]
+    carpeta = _carpeta_planos(pid)
+    carpeta.mkdir(parents=True, exist_ok=True)
+    (carpeta / f"{fid}.{tipo[0]}").write_bytes(crudo)
+    plano = {"id": fid, "archivo": f"{fid}.{tipo[0]}", "nombre": (datos.get("nombre") or "Plano")[:120],
+             "ancho": int(datos.get("ancho") or 0), "alto": int(datos.get("alto") or 0),
+             "georef": datos.get("georef"), "opacidad": 0.6, "visible": True, "planta": datos.get("planta") or "exterior"}
+    db.auditar(u["usuario"], "cargar_plano", f"{p['nombre']}: {plano['nombre']}")
+    return db.actualizar_proyecto(pid, {"planos": [*p.get("planos", []), plano]})
+
+
+@app.get("/api/proyectos/{pid}/planos/{archivo}")
+def get_plano(pid: str, archivo: str, u: dict = Depends(usuario_actual)):
+    p = _proyecto(pid, u)
+    if not ARCHIVO_PLANO.match(archivo) or archivo not in {pl["archivo"] for pl in p.get("planos", [])}:
+        raise HTTPException(404, "Plano no encontrado")
+    ruta = _carpeta_planos(pid) / archivo
+    if not ruta.exists():
+        raise HTTPException(404, "Plano no encontrado")
+    return FileResponse(ruta, media_type="image/png" if archivo.endswith(".png") else "image/jpeg")
+
+
+@app.delete("/api/proyectos/{pid}/planos/{fid}")
+def delete_plano(pid: str, fid: str, u: dict = Depends(editor)):
+    p = _proyecto(pid, u)
+    plano = next((pl for pl in p.get("planos", []) if pl["id"] == fid), None)
+    if not plano:
+        raise HTTPException(404, "Plano no encontrado")
+    if ARCHIVO_PLANO.match(plano["archivo"]):
+        (_carpeta_planos(pid) / plano["archivo"]).unlink(missing_ok=True)
+    return db.actualizar_proyecto(pid, {"planos": [pl for pl in p["planos"] if pl["id"] != fid]})
 
 
 # --------------------------------------------------------------------------- escenarios

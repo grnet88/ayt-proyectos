@@ -358,6 +358,7 @@ mapa.on("pm:create", (e) => {
 });
 
 mapa.on("click", (e) => {
+  if (typeof clicCalibracion === "function" && clicCalibracion(e)) return;
   if (estado.soloLectura) return;
   if (["camara", "gabinete", "central", "ups"].includes(estado.herramienta)) agregarPunto(estado.herramienta, e.latlng);
   else if (!estado.herramienta && estado.seleccion) seleccionar(null);
@@ -593,6 +594,7 @@ async function abrir(id) {
   $("#sel-categoria").value = p.categoria || "";
   if (p.vista) mapa.setView(p.vista.centro, p.vista.zoom);
   recordar("ayt-ultimo", id);
+  if (typeof dibujarPlanos === "function") dibujarPlanos();
   const previo = recuerdo(`ayt-escenario-${id}`);
   await abrirEscenario(p.escenarios.some((e) => e.id === previo) ? previo : p.escenarios[0].id);
 }
@@ -626,7 +628,7 @@ async function nuevo() {
 $("#btn-nuevo").onclick = nuevo;
 $("#sel-proyecto").onchange = (e) => abrir(e.target.value);
 $("#sel-escenario").onchange = (e) => abrirEscenario(e.target.value);
-$("#sel-planta").onchange = (e) => { estado.planta = e.target.value; estado.seleccion = null; inspector(); dibujar(); };
+$("#sel-planta").onchange = (e) => { estado.planta = e.target.value; estado.seleccion = null; inspector(); dibujar(); if (typeof dibujarPlanos === "function") dibujarPlanos(); };
 for (const [sel, k] of [["#inp-nombre", "nombre"], ["#inp-cliente", "cliente"], ["#sel-categoria", "categoria"]]) {
   $(sel).addEventListener("change", async (e) => {
     await guardarProyecto({ [k]: e.target.value });
