@@ -35,6 +35,25 @@ distribución, duplicar escenario, usuario visor de solo lectura, recuperación 
   cruces de calzada y cámaras de paso por medida.
 - Pendiente: que fibra y energía se tiendan por las canalizaciones dibujadas (hoy van por el cerco).
 
+## Etapa 1, parte 5: prueba Cinco Lagos y DXF grandes (2026-10-20)
+
+- Prueba con `Masterplan y Cerco Perimetral Cinco Lagos ABC.dxf` (101 MB, 112 capas, viene de un PDF):
+  capa "CCTV - Seguridad Perimetral" = cerco de 83 vértices + 71 símbolos de cámara (color 2) y 23 de
+  gabinete (color 32). Cámaras dibujadas cada ~60 m en los lados rectos.
+- Motor sobre ese cerco (3620 m): por defecto (espaciado 90 % del alcance de analítica = 33 m) da 121
+  cámaras, 31 gabinetes, 99,7 % de cobertura. Con espaciado 45 m: 92 / 23 / 84 % y 4306 m de fibra
+  (presupuesto real: 85 / 21 / ~4300 m). Con 60 m (como el dibujo): 71 / 18 / 65 %.
+- Nuevo parámetro `lado_min_m` (15 m): los escalones cortos del cerco no llevan cámara de esquina propia.
+- DXF grande: se sube el archivo crudo (hasta 300 MB), se lee de a una entidad (`ezdxf.addons.iterdxf`,
+  ~50 MB de memoria; si falla, lector tolerante), el servidor guarda la geometría por capa en
+  `datos/importar/<token>/` (se borra a las 2 h) y devuelve solo el resumen; el navegador pide después
+  las capas elegidas (límite 200 000 vértices). La unión de tramos sueltos usa una grilla (antes era cuadrática).
+- HATCH y SOLID se importan como un punto en su centro; si una capa tiene símbolos de varios colores,
+  cada color aparece como grupo aparte ("capa · color N").
+- En DXF solo se sugiere tipo para capas con cerco/perímetro/CCTV en el nombre; el resto queda en "No importar".
+- Si las unidades del archivo dejan el dibujo diminuto (PDF → DXF), la vista previa se ajusta a la pantalla
+  para poder calibrar. Las cámaras importadas a menos de 30 m del perímetro se orientan a lo largo del cerco.
+
 ## Etapa 1, parte 3: importar KML/KMZ y DXF (2026-10-20)
 
 - "Importar KML, KMZ o DXF": el servidor agrupa la geometría por carpeta (KML) o capa (DXF) y en el

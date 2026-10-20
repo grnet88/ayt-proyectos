@@ -20,6 +20,7 @@ PARAMETROS_DEFAULT = {
     "espaciado_m": None,  # None = 90 % del alcance de analítica del modelo
     "sentido": "trazado",  # "trazado": miran en el sentido en que se dibujó el cerco; "inverso": al revés
     "angulo_quiebre": 25.0,  # giro (°) a partir del cual un vértice es esquina y lleva cámara
+    "lado_min_m": 15.0,  # un lado más corto (escalón del cerco) no lleva cámara propia
     "dist_min_camara_m": 2.0,  # zona ciega si el modelo no informa ángulo vertical (PTZ, etc.)
     "altura_camara_m": 4.0,  # altura de montaje por defecto
     "ppm_minimo": 25.0,  # PPM mínimo en el borde del alcance (25 = detección, IEC 62676-4)
@@ -200,7 +201,7 @@ def distribuir_perimetro(proyecto: dict, catalogo: dict[str, dict], opciones: di
     camaras, progresivas = [], []
     # Cada lado del cerco (entre quiebres marcados) arranca con una cámara en su esquina mirando
     # a lo largo del lado; así ninguna esquina queda ciega.
-    for ini, fin in rec.lados(p["angulo_quiebre"]):
+    for ini, fin in rec.lados(p["angulo_quiebre"], float(p["lado_min_m"] or 0)):
         largo = fin - ini
         n = max(1, math.ceil(largo / esp - 0.05))
         for k in range(n):

@@ -2,10 +2,11 @@
 "use strict";
 
 const api = async (metodo, ruta, cuerpo) => {
+  const crudo = cuerpo instanceof Blob; // archivos grandes van tal cual, sin base64
   const r = await fetch(ruta, {
     method: metodo,
-    headers: cuerpo ? { "Content-Type": "application/json" } : {},
-    body: cuerpo ? JSON.stringify(cuerpo) : undefined,
+    headers: cuerpo ? { "Content-Type": crudo ? "application/octet-stream" : "application/json" } : {},
+    body: cuerpo ? (crudo ? cuerpo : JSON.stringify(cuerpo)) : undefined,
   });
   if (r.status === 401 && !ruta.startsWith("/api/ingresar")) {
     mostrarAcceso("ingreso", "Tu sesión terminó. Volvé a ingresar.");
@@ -40,6 +41,7 @@ const ETIQUETAS_PARAM = {
   factor_energia: "Factor de cable de energía",
   margen_ups: "Margen de UPS",
   angulo_quiebre: "Giro para considerar esquina (°)",
+  lado_min_m: "Lado mínimo con cámara propia (m)",
 };
 
 const estado = {

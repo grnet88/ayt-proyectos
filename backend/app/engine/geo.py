@@ -99,8 +99,24 @@ class Recorrido:
                 mejor = (self.acum[i - 1] + t * math.sqrt(l2), d)
         return mejor
 
-    def lados(self, angulo_quiebre: float) -> list[tuple[float, float]]:
-        """Tramos (progresiva inicio, fin) entre vértices donde el trazado gira más que el umbral."""
+    def lados(self, angulo_quiebre: float, lado_min: float = 0.0) -> list[tuple[float, float]]:
+        """Tramos (progresiva inicio, fin) entre vértices donde el trazado gira más que el umbral.
+        Un lado más corto que lado_min (un escalón del cerco) se suma al anterior."""
+        out = self._lados(angulo_quiebre)
+        if lado_min <= 0 or len(out) < 2:
+            return out
+        fusion = []
+        for ini, fin in out:
+            if fusion and fin - ini < lado_min:
+                fusion[-1] = (fusion[-1][0], fin)
+            else:
+                fusion.append((ini, fin))
+        if self.cerrado and len(fusion) > 1 and fusion[0][1] - fusion[0][0] < lado_min:
+            ini, fin = fusion.pop(0)
+            fusion[-1] = (fusion[-1][0], fin + self.largo)
+        return fusion
+
+    def _lados(self, angulo_quiebre: float) -> list[tuple[float, float]]:
         n = len(self.pts) - 1
         if n < 1:
             return []

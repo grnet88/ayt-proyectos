@@ -7,13 +7,16 @@ from __future__ import annotations
 import base64
 import csv
 import io
+import json
 import mimetypes
 import re
 import shutil
+import time
 import uuid
 from pathlib import Path
 
 from fastapi import Depends, FastAPI, HTTPException, Request, Response
+from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import FileResponse, PlainTextResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
@@ -310,26 +313,85 @@ def delete_plano(pid: str, fid: str, u: dict = Depends(editor)):
     return db.actualizar_proyecto(pid, {"planos": [pl for pl in p["planos"] if pl["id"] != fid]})
 
 
+MAX_IMPORTAR = 300 * 1024 * 1024
+TOKEN_IMPORTAR = re.compile(r"^[0-9a-f]{32}$")
+
+
+def _carpeta_importar() -> Path:
+    return db.RUTA_DB.parent / "importar"
+
+
+def _limpiar_importaciones(horas: float = 2) -> None:
+    raiz = _carpeta_importar()
+    if not raiz.is_dir():
+        return
+    limite = time.time() - horas * 3600
+    for d in raiz.iterdir():
+        if d.is_dir() and d.stat().st_mtime < limite:
+            shutil.rmtree(d, ignore_errors=True)
+
+
+def _leer_y_guardar(ruta: Path, nombre: str) -> dict:
+    """KML: devuelve la geometría completa. DXF: la guarda por capa en el servidor y devuelve solo el
+    resumen; la interfaz pide después las capas elegidas (un plano entero puede tener millones de vértices)."""
+    if nombre.endswith((".kml", ".kmz")):
+        r = importar.leer_kml(ruta.read_bytes(), nombre)
+        r["grupos"] = [dict(g, **importar.conteo(g)) for g in r["grupos"]]
+        return r
+    if nombre.endswith(".dxf"):
+        r = importar.leer_dxf(ruta)
+        carpeta = ruta.parent
+        for i, g in enumerate(r["grupos"]):
+            (carpeta / f"{i}.json").write_text(json.dumps(g), encoding="utf-8")
+        ruta.unlink()
+        r["grupos"] = [importar.conteo(g) for g in r["grupos"]]
+        r["token"] = carpeta.name
+        (carpeta / "meta.json").write_text(json.dumps(r), encoding="utf-8")
+        return r
+    if nombre.endswith(".dwg"):
+        raise importar.ErrorImportacion("Los DWG no se leen directo. Desde AutoCAD usá Guardar como → DXF.")
+    raise importar.ErrorImportacion("Formato no soportado: usá KML, KMZ o DXF")
+
+
 @app.post("/api/importar")
-def post_importar(datos: dict, _: dict = Depends(editor)):
-    """Lee un KML/KMZ o DXF (en base64) y devuelve su geometría agrupada por carpeta o capa."""
+async def post_importar(request: Request, nombre: str = "", _: dict = Depends(editor)):
+    """Recibe el archivo crudo (KML, KMZ o DXF) y devuelve sus grupos (carpetas o capas)."""
+    _limpiar_importaciones()
+    carpeta = _carpeta_importar() / uuid.uuid4().hex
+    carpeta.mkdir(parents=True)
+    ruta, total = carpeta / "archivo", 0
     try:
-        crudo = base64.b64decode((datos.get("contenido") or "").split(",", 1)[-1], validate=True)
-    except ValueError:
-        raise HTTPException(422, "Archivo inválido")
-    if len(crudo) > MAX_PLANO:
-        raise HTTPException(413, "El archivo supera los 30 MB")
-    nombre = (datos.get("nombre") or "").lower()
-    try:
-        if nombre.endswith((".kml", ".kmz")):
-            return importar.leer_kml(crudo, nombre)
-        if nombre.endswith(".dxf"):
-            return importar.leer_dxf(crudo)
-        if nombre.endswith(".dwg"):
-            raise importar.ErrorImportacion("Los DWG no se leen directo. Desde AutoCAD usá Guardar como → DXF.")
+        with open(ruta, "wb") as fh:
+            async for parte in request.stream():
+                total += len(parte)
+                if total > MAX_IMPORTAR:
+                    raise HTTPException(413, "El archivo supera los 300 MB")
+                fh.write(parte)
+        if not total:
+            raise HTTPException(422, "Archivo vacío")
+        r = await run_in_threadpool(_leer_y_guardar, ruta, nombre.lower())
     except importar.ErrorImportacion as e:
+        shutil.rmtree(carpeta, ignore_errors=True)
         raise HTTPException(422, str(e))
-    raise HTTPException(422, "Formato no soportado: usá KML, KMZ o DXF")
+    except BaseException:
+        shutil.rmtree(carpeta, ignore_errors=True)
+        raise
+    if "token" not in r:
+        shutil.rmtree(carpeta, ignore_errors=True)
+    return r
+
+
+@app.post("/api/importar/{token}")
+def post_importar_capas(token: str, datos: dict, _: dict = Depends(editor)):
+    """Geometría de las capas elegidas de un DXF ya leído."""
+    carpeta = _carpeta_importar() / token
+    if not TOKEN_IMPORTAR.match(token) or not (carpeta / "meta.json").is_file():
+        raise HTTPException(404, "La lectura del archivo venció: volvé a cargarlo.")
+    meta = json.loads((carpeta / "meta.json").read_text(encoding="utf-8"))
+    indices = sorted({int(i) for i in datos.get("grupos", []) if 0 <= int(i) < len(meta["grupos"])})
+    if sum(meta["grupos"][i]["vertices"] for i in indices) > importar.MAX_VERTICES:
+        raise HTTPException(422, "Las capas elegidas tienen demasiados vértices para el mapa. Elegí solo cercos, muros y CCTV.")
+    return {"grupos": [json.loads((carpeta / f"{i}.json").read_text(encoding="utf-8")) for i in indices]}
 
 
 # --------------------------------------------------------------------------- escenarios

@@ -76,3 +76,18 @@ def test_dxf_cerco_con_lineas_sueltas_se_une():
     doc.write(buf)
     (g,) = leer_dxf(buf.getvalue().encode())["grupos"]
     assert len(g["lineas"]) == 1 and g["lineas"][0]["cerrada"] and len(g["lineas"][0]["coords"]) == 4
+
+
+def test_dxf_rellenos_como_puntos_separados_por_color():
+    doc = ezdxf.new()
+    msp = doc.modelspace()
+    for x, color in ((0, 2), (60, 2), (30, 32)):
+        h = msp.add_hatch(color=color, dxfattribs={"layer": "CCTV"})
+        h.paths.add_polyline_path([(x, 0), (x + 7, 0), (x + 7, 3), (x, 3)])
+    msp.add_lwpolyline([(0, 10), (100, 10)], dxfattribs={"layer": "CCTV"})
+    buf = io.StringIO()
+    doc.write(buf)
+    g = {x["nombre"]: x for x in leer_dxf(buf.getvalue().encode())["grupos"]}
+    assert set(g) == {"CCTV", "CCTV · color 2", "CCTV · color 32"}
+    assert [p["coords"] for p in g["CCTV · color 2"]["puntos"]] == [[3.5, 1.5], [63.5, 1.5]]
+    assert len(g["CCTV · color 32"]["puntos"]) == 1 and len(g["CCTV"]["lineas"]) == 1 and not g["CCTV"]["puntos"]

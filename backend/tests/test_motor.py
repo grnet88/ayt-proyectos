@@ -103,3 +103,12 @@ def test_rack_alejado_del_cerco_se_vincula_por_el_punto_mas_cercano():
     res = calcular(p, CATALOGO)
     assert len(res["fibra"]["tramos"]) == 2
     assert 3700 < res["fibra"]["total_m"] < 5000
+
+
+def test_escalon_corto_no_lleva_camara_propia():
+    # lado de 100 m con un escalón de 4 m en el medio: con lado mínimo el escalón no suma esquina
+    pts = [(0, 0), (50, 0), (50, 4), (100, 4), (100, 60), (0, 60)]
+    r = Recorrido(pts, cerrado=True)
+    assert len(r.lados(25)) == 6
+    assert len(r.lados(25, 15)) == 5
+    assert sum(f - i for i, f in r.lados(25, 15)) == pytest.approx(r.largo)

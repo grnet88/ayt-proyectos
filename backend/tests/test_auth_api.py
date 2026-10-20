@@ -143,3 +143,28 @@ def test_planos_carga_lectura_y_borrado(cliente):
     cliente.put(f"/api/proyectos/{p['id']}", json={"planos": [plano]})
     assert cliente.delete(f"/api/proyectos/{p['id']}/planos/{plano['id']}").json()["planos"] == []
     assert cliente.get(f"/api/proyectos/{p['id']}/planos/{plano['archivo']}").status_code == 404
+
+
+def test_importar_dxf_en_dos_pasos(cliente):
+    import io
+
+    import ezdxf
+    configurar(cliente)
+    ingresar(cliente)
+    doc = ezdxf.new()
+    msp = doc.modelspace()
+    msp.add_lwpolyline([(0, 0), (100, 0), (100, 50), (0, 50)], close=True, dxfattribs={"layer": "CERCO"})
+    h = msp.add_hatch(dxfattribs={"layer": "CCTV"})
+    h.paths.add_polyline_path([(10, 10), (17, 10), (17, 13), (10, 13)])
+    buf = io.StringIO()
+    doc.write(buf)
+    r = cliente.post("/api/importar?nombre=barrio.dxf", content=buf.getvalue().encode())
+    assert r.status_code == 200, r.text
+    d = r.json()
+    capas = {g["nombre"]: g for g in d["grupos"]}
+    assert capas["CERCO"]["n_cerradas"] == 1 and capas["CCTV"]["n_puntos"] == 1 and "lineas" not in capas["CCTV"]
+    i = [g["nombre"] for g in d["grupos"]].index("CCTV")
+    (g,) = cliente.post(f"/api/importar/{d['token']}", json={"grupos": [i]}).json()["grupos"]
+    assert g["puntos"][0]["coords"] == [13.5, 11.5]
+    assert cliente.post("/api/importar/" + "0" * 32, json={"grupos": [0]}).status_code == 404
+    assert cliente.post("/api/importar?nombre=plano.dwg", content=b"AC1032xxxx").status_code == 422

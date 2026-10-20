@@ -149,5 +149,6 @@ body.calibrando .leaflet-marker-pane *, body.calibrando .leaflet-overlay-pane * 
 .barra-flotante button.primario { width: auto; margin: 0; }
 #inp-importar { display: none; }
 #importar-cuerpo select { width: 100%; }
+#importar-cuerpo { max-height: 65vh; overflow: auto; }
 .icono-camara_paso { background: #6d4c41; border-radius: 2px; font-size: 8px; }
 .cp-auto { width: 9px; height: 9px; background: #8d6e63; border: 1.5px solid #fff; box-shadow: 0 0 2px #000; }
