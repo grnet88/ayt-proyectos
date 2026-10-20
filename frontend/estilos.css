@@ -141,3 +141,11 @@ body.calibrando #ayuda-plano { color: var(--acento); font-weight: 600; }
 body.calibrando .leaflet-marker-pane, body.calibrando .leaflet-overlay-pane, body.calibrando .leaflet-tooltip-pane { pointer-events: none; }
 body.calibrando .leaflet-marker-pane *, body.calibrando .leaflet-overlay-pane * { pointer-events: none !important; }
 #inp-plano { display: none; }
+
+/* importación */
+.barra-flotante { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); z-index: 1500; display: flex; gap: 8px; align-items: center; flex-wrap: wrap;
+  max-width: calc(100vw - 32px); background: var(--panel); border: 1px solid var(--borde); border-radius: 10px; padding: 10px 14px; box-shadow: 0 4px 16px rgba(0,0,0,.3); }
+.barra-flotante[hidden] { display: none; }
+.barra-flotante button.primario { width: auto; margin: 0; }
+#inp-importar { display: none; }
+#importar-cuerpo select { width: 100%; }

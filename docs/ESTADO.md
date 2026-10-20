@@ -23,6 +23,18 @@
 Probado: 14 pruebas automáticas y recorrido completo en navegador (configuración, llave, ingreso,
 distribución, duplicar escenario, usuario visor de solo lectura, recuperación y rechazo de la llave usada).
 
+## Etapa 1, parte 3: importar KML/KMZ y DXF (2026-10-20)
+
+- "Importar KML, KMZ o DXF": el servidor agrupa la geometría por carpeta (KML) o capa (DXF) y en el
+  diálogo se elige qué es cada grupo: perímetro, muro, obstáculo, cámara, gabinete, UPS, rack o solo
+  dibujo de referencia (se ve en el mapa y no entra en el cálculo). Sugiere según el nombre de la capa.
+- KML ya viene georreferenciado. El DXF se ubica con la calibración de 2 puntos (como los planos), con
+  vista previa naranja y aviso si la escala no coincide con las unidades del dibujo ($INSUNITS).
+- DXF: LINE, LWPOLYLINE, POLYLINE, CIRCLE, ARC, POINT e INSERT (bloque = punto con su nombre). Las
+  líneas sueltas que se tocan se unen en una sola polilínea. DWG no: hay que guardarlo como DXF.
+- Nueva dependencia: `ezdxf` (en requirements.txt; en el servidor correr `pip install -r requirements.txt`).
+- Los tramos ciegos ahora siguen las esquinas del cerco.
+
 ## Etapa 1, parte 2: planos superpuestos (2026-10-20)
 
 - Sección **Planos**: cargar PNG, JPG o PDF (se usa la primera página, renderizada en el navegador con

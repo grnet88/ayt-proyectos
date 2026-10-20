@@ -47,7 +47,8 @@ detenido (o programar una copia diaria). Actualizar la aplicación no toca esa c
 
 ## Actualizar
 
-Con Git: `git pull` en la carpeta y reiniciar el servidor. Sin Git: descomprimir la versión nueva encima,
+Con Git: `git pull` en la carpeta, luego `.venv\Scripts\python -m pip install -r requirements.txt`
+(por si hay librerías nuevas) y reiniciar el servidor. Sin Git: descomprimir la versión nueva encima,
 sin borrar la carpeta `datos`.
 
 ## Notas

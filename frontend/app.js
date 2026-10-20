@@ -202,11 +202,12 @@ function dibujar() {
   estado.marcadores = {};
   const verCob = $("#chk-coberturas").checked;
 
-  for (const f of [...porTipo("perimetro"), ...porTipo("muro"), ...porTipo("obstaculo")]) {
+  for (const f of [...porTipo("referencia"), ...porTipo("perimetro"), ...porTipo("muro"), ...porTipo("obstaculo")]) {
     const latlngs = (f.geometry.type === "Polygon" ? f.geometry.coordinates[0] : f.geometry.coordinates).map(([lon, lat]) => [lat, lon]);
     const sel = estado.seleccion === f.id, t = f.properties.tipo;
     const estilo = t === "perimetro" ? { color: sel ? "#ffeb3b" : "#ffffff", weight: sel ? 4 : 3, fill: false, dashArray: "6 4" }
       : t === "muro" ? { color: sel ? "#ffeb3b" : "#ff7043", weight: sel ? 6 : 5 }
+      : t === "referencia" ? { color: sel ? "#ffeb3b" : "#4dd0e1", weight: sel ? 3 : 1.5, fill: false, opacity: 0.85 }
       : { color: sel ? "#ffeb3b" : "#78909c", weight: 2, fillColor: "#546e7a", fillOpacity: 0.55 };
     const capa = f.geometry.type === "Polygon" ? L.polygon(latlngs.slice(0, -1), estilo) : L.polyline(latlngs, estilo);
     capa.feature_id = f.id;
@@ -417,8 +418,8 @@ function inspector() {
     const g = estado.calculo.gabinetes.find((x) => x.id === f.id);
     if (g) html += `<p class="ayuda">${g.camaras} cámaras · PoE ${fmt(g.poe_w)} W · ${esc(g.switch || "sin switch adecuado")} · UTP máx ${fmt(g.utp_max_m)} m · caída ${fmt(g.caida_pct, 2)}% (${esc(g.fuente || "")})</p>`;
   }
-  if (p.tipo === "muro" || p.tipo === "obstaculo") {
-    html += `<p class="ayuda">${p.tipo === "muro" ? "Muro o pared" : "Obstáculo"}: corta la visión de las cámaras (cálculo en planta, sin altura).</p>
+  if (p.tipo === "muro" || p.tipo === "obstaculo" || p.tipo === "referencia") {
+    html += `<p class="ayuda">${{ muro: "Muro o pared: corta la visión de las cámaras (cálculo en planta, sin altura).", obstaculo: "Obstáculo: corta la visión de las cámaras (cálculo en planta, sin altura).", referencia: "Dibujo de referencia importado: no interviene en los cálculos." }[p.tipo]}</p>
       <button id="btn-vertices" class="edicion">${estado.editandoVertices ? "Terminar edición" : "Editar vértices"}</button>`;
   }
   if (p.tipo === "perimetro") {

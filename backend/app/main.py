@@ -17,7 +17,7 @@ from fastapi import Depends, FastAPI, HTTPException, Request, Response
 from fastapi.responses import FileResponse, PlainTextResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
-from . import auth, db
+from . import auth, db, importar
 from .engine.calculo import PARAMETROS_DEFAULT, calcular, distribuir_perimetro
 
 FRONTEND = Path(__file__).resolve().parents[2] / "frontend"
@@ -308,6 +308,28 @@ def delete_plano(pid: str, fid: str, u: dict = Depends(editor)):
     if ARCHIVO_PLANO.match(plano["archivo"]):
         (_carpeta_planos(pid) / plano["archivo"]).unlink(missing_ok=True)
     return db.actualizar_proyecto(pid, {"planos": [pl for pl in p["planos"] if pl["id"] != fid]})
+
+
+@app.post("/api/importar")
+def post_importar(datos: dict, _: dict = Depends(editor)):
+    """Lee un KML/KMZ o DXF (en base64) y devuelve su geometría agrupada por carpeta o capa."""
+    try:
+        crudo = base64.b64decode((datos.get("contenido") or "").split(",", 1)[-1], validate=True)
+    except ValueError:
+        raise HTTPException(422, "Archivo inválido")
+    if len(crudo) > MAX_PLANO:
+        raise HTTPException(413, "El archivo supera los 30 MB")
+    nombre = (datos.get("nombre") or "").lower()
+    try:
+        if nombre.endswith((".kml", ".kmz")):
+            return importar.leer_kml(crudo, nombre)
+        if nombre.endswith(".dxf"):
+            return importar.leer_dxf(crudo)
+        if nombre.endswith(".dwg"):
+            raise importar.ErrorImportacion("Los DWG no se leen directo. Desde AutoCAD usá Guardar como → DXF.")
+    except importar.ErrorImportacion as e:
+        raise HTTPException(422, str(e))
+    raise HTTPException(422, "Formato no soportado: usá KML, KMZ o DXF")
 
 
 # --------------------------------------------------------------------------- escenarios

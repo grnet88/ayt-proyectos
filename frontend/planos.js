@@ -170,17 +170,24 @@ const PASOS_CALIBRACION = [
   "Calibrar 4/4: hacé clic en ese segundo punto sobre el SATÉLITE.",
 ];
 
-function iniciarCalibracion(p) {
+// `objeto` tiene `georef` (se reemplaza al terminar); `listo(objeto)` se llama al calibrar bien.
+// Sirve para planos (imagen) y para dibujos importados (DXF).
+function calibrar(objeto, listo, textoPlano = "PLANO") {
   usarHerramienta(null);
-  planos.calibrando = { plano: p, clics: [] };
+  planos.calibrando = { plano: objeto, clics: [], listo, pasos: PASOS_CALIBRACION.map((t) => t.replace("PLANO", textoPlano)) };
   planos.marcas.clearLayers();
+  document.body.classList.add("calibrando");
+  ayudaPlano(`${planos.calibrando.pasos[0]} Esc para cancelar.`);
+}
+
+function iniciarCalibracion(p) {
   p.visible = true;
   dibujarPlanos();
-  document.body.classList.add("calibrando");
-  ayudaPlano(`${PASOS_CALIBRACION[0]} Esc para cancelar.`);
+  calibrar(p, () => { dibujarPlanos(); guardarPlanos(); });
 }
 
 function terminarCalibracion(mensaje) {
+  planos.calibrando?.cancelado?.();
   planos.calibrando = null;
   planos.marcas.clearLayers();
   document.body.classList.remove("calibrando");
@@ -196,23 +203,26 @@ function clicCalibracion(e) {
   L.circleMarker(e.latlng, { radius: 6, color: enPlano ? "#ff7043" : "#ffeb3b", weight: 3, fillOpacity: 0.3, interactive: false })
     .bindTooltip(`${enPlano ? "Plano" : "Satélite"} ${Math.floor(i / 2) + 1}`, { permanent: true, direction: "right" })
     .addTo(planos.marcas);
-  if (cal.clics.length < 4) { ayudaPlano(`${PASOS_CALIBRACION[cal.clics.length]} Esc para cancelar.`); return true; }
+  if (cal.clics.length < 4) { ayudaPlano(`${cal.pasos[cal.clics.length]} Esc para cancelar.`); return true; }
 
   const [w1, z1ll, w2, z2ll] = cal.clics;
   const kx = K_METROS * Math.cos((z1ll.lat * Math.PI) / 180);
   const z2 = [(z2ll.lng - z1ll.lng) * kx, (z2ll.lat - z1ll.lat) * K_METROS]; // metros desde el satélite 1
   const dw = [w2[0] - w1[0], -(w2[1] - w1[1])]; // píxeles como complejo u − i·v
   const n = dw[0] ** 2 + dw[1] ** 2;
-  if (n < 25) { terminarCalibracion("Los dos puntos del plano están demasiado cerca. Volvé a calibrar."); return true; }
+  if (n === 0 || mapa.latLngToContainerPoint(pixelALatLng(cal.plano.georef, ...w1)).distanceTo(mapa.latLngToContainerPoint(pixelALatLng(cal.plano.georef, ...w2))) < 10) {
+    terminarCalibracion("Los dos puntos del plano están demasiado cerca. Volvé a calibrar.");
+    return true;
+  }
   const kr = (z2[0] * dw[0] + z2[1] * dw[1]) / n, ki = (z2[1] * dw[0] - z2[0] * dw[1]) / n;
   // origen (píxel 0,0) = z1 − k·w1
   const w1c = [w1[0], -w1[1]];
   const ox = -(kr * w1c[0] - ki * w1c[1]), oy = -(kr * w1c[1] + ki * w1c[0]);
   cal.plano.georef = { lat0: z1ll.lat + oy / K_METROS, lon0: z1ll.lng + ox / kx, kr, ki };
   const giro = fmt((Math.atan2(-ki, kr) * 180) / Math.PI, 1);
-  terminarCalibracion(`Plano ubicado: 1 px = ${fmt(Math.hypot(kr, ki) * 100, 1)} cm, giro ${giro}°.`);
-  dibujarPlanos();
-  guardarPlanos();
+  cal.cancelado = null;
+  terminarCalibracion(`Ubicado: escala ${fmt(Math.hypot(kr, ki) * 100, 2)} cm por unidad, giro ${giro}°.`);
+  cal.listo(cal.plano);
   return true;
 }
 

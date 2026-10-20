@@ -78,6 +78,13 @@ class Recorrido:
                 return (a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t), azimut(a, b)
         return self.pts[-1], 0.0
 
+    def tramo(self, desde: float, hasta: float) -> list[tuple[float, float]]:
+        """Puntos del recorrido entre dos progresivas, incluyendo los vértices intermedios."""
+        pts = [self.punto(desde)[0]]
+        pts += [self.pts[i] for i in range(1, len(self.pts) - 1) if desde < self.acum[i] < hasta]
+        pts.append(self.punto(hasta)[0])
+        return pts
+
     def proyectar(self, p: tuple[float, float]) -> tuple[float, float]:
         """Progresiva del punto más cercano del recorrido y distancia perpendicular."""
         mejor = (0.0, float("inf"))

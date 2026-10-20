@@ -377,7 +377,7 @@ def calcular(proyecto: dict, catalogo: dict[str, dict]) -> dict:
                     hueco = s
                 elif ok and hueco is not None:
                     if s - hueco >= paso * 2:
-                        pts = [r.punto(hueco + (s - hueco) * k / 8)[0] for k in range(9)]
+                        pts = r.tramo(hueco, min(s, r.largo))
                         cobertura["huecos"].append({
                             "desde_m": round(hueco, 1), "largo_m": round(s - hueco, 1),
                             "coords": [list(reversed([round(v, 7) for v in proj.a_latlon(*q)])) for q in pts],
