@@ -129,3 +129,25 @@ fieldset[hidden] { display: none; }
 .manija-giro { width: 14px; height: 14px; border-radius: 50%; background: #ffeb3b; border: 2px solid #000; cursor: grab; box-shadow: 0 0 3px #000; }
 .orientacion { align-items: center; }
 .orientacion input { text-align: center; }
+
+/* planos superpuestos */
+.plano-img { position: absolute; left: 0; top: 0; transform-origin: 0 0; pointer-events: none; max-width: none; user-select: none; }
+.plano { border: 1px solid var(--borde); border-radius: 6px; padding: 6px 8px; margin: 6px 0; }
+.plano input[type=range] { width: 100%; }
+label.cargar-plano { display: block; text-align: center; color: var(--texto); margin-top: 6px; }
+body.calibrando #mapa { cursor: crosshair; }
+body.calibrando #ayuda-plano { color: var(--acento); font-weight: 600; }
+/* durante la calibración los clics van al mapa aunque caigan sobre una cámara o el cerco */
+body.calibrando .leaflet-marker-pane, body.calibrando .leaflet-overlay-pane, body.calibrando .leaflet-tooltip-pane { pointer-events: none; }
+body.calibrando .leaflet-marker-pane *, body.calibrando .leaflet-overlay-pane * { pointer-events: none !important; }
+#inp-plano { display: none; }
+
+/* importación */
+.barra-flotante { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); z-index: 1500; display: flex; gap: 8px; align-items: center; flex-wrap: wrap;
+  max-width: calc(100vw - 32px); background: var(--panel); border: 1px solid var(--borde); border-radius: 10px; padding: 10px 14px; box-shadow: 0 4px 16px rgba(0,0,0,.3); }
+.barra-flotante[hidden] { display: none; }
+.barra-flotante button.primario { width: auto; margin: 0; }
+#inp-importar { display: none; }
+#importar-cuerpo select { width: 100%; }
+.icono-camara_paso { background: #6d4c41; border-radius: 2px; font-size: 8px; }
+.cp-auto { width: 9px; height: 9px; background: #8d6e63; border: 1.5px solid #fff; box-shadow: 0 0 2px #000; }

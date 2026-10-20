@@ -34,6 +34,49 @@
 Probado: 14 pruebas automáticas y recorrido completo en navegador (configuración, llave, ingreso,
 distribución, duplicar escenario, usuario visor de solo lectura, recuperación y rechazo de la llave usada).
 
+## Etapa 1, parte 4: canalizaciones y cámaras de paso (2026-10-20)
+
+- Herramienta **Canalización** (línea): enterrada (caño PEAD), aérea sobre cerco/postes o sobre pared/bandeja;
+  diámetro (por defecto 40 mm) y marca de **cruce de calzada**.
+- En las enterradas, las cámaras de paso se calculan solas: extremos, quiebres de más de 45° y cada 40 m
+  (parámetros `dist_camaras_paso_m`, `giro_camara_paso`). Se ven como cuadraditos marrones. Las compartidas
+  entre canalizaciones se cuentan una vez; una **Cámara de paso** puesta a mano (con su medida) reemplaza
+  a la automática que esté a menos de 5 m.
+- Listado, categoría "Obra civil": metros de canalización por tipo y diámetro (factor 1,03), zanjeo,
+  cruces de calzada y cámaras de paso por medida.
+- Pendiente: que fibra y energía se tiendan por las canalizaciones dibujadas (hoy van por el cerco).
+
+## Etapa 1, parte 3: importar KML/KMZ y DXF (2026-10-20)
+
+- "Importar KML, KMZ o DXF": el servidor agrupa la geometría por carpeta (KML) o capa (DXF) y en el
+  diálogo se elige qué es cada grupo: perímetro, muro, obstáculo, cámara, gabinete, UPS, rack o solo
+  dibujo de referencia (se ve en el mapa y no entra en el cálculo). Sugiere según el nombre de la capa.
+- KML ya viene georreferenciado. El DXF se ubica con la calibración de 2 puntos (como los planos), con
+  vista previa naranja y aviso si la escala no coincide con las unidades del dibujo ($INSUNITS).
+- DXF: LINE, LWPOLYLINE, POLYLINE, CIRCLE, ARC, POINT e INSERT (bloque = punto con su nombre). Las
+  líneas sueltas que se tocan se unen en una sola polilínea. DWG no: hay que guardarlo como DXF.
+- Nueva dependencia: `ezdxf` (en requirements.txt; en el servidor correr `pip install -r requirements.txt`).
+- Los tramos ciegos ahora siguen las esquinas del cerco.
+
+## Etapa 1, parte 2: planos superpuestos (2026-10-20)
+
+- Sección **Planos**: cargar PNG, JPG o PDF (se usa la primera página, renderizada en el navegador con
+  pdf.js, incluido en `frontend/vendor/pdfjs`). Los archivos quedan en `datos/planos/<proyecto>/`.
+- Se ubica con **calibración de 2 puntos**: un punto del plano y el mismo en el satélite, dos veces.
+  Calcula escala y giro (similitud). Transparencia regulable, se puede ocultar o borrar.
+- Cada plano pertenece a una planta (por ahora Exterior); sirve también para plantas interiores más adelante.
+
+## Etapa 1, parte 1: óptica y obstáculos (2026-10-20)
+
+- Cada cámara tiene altura (`altura_m`, por defecto 4 m) e inclinación (`inclinacion`, grados bajo la horizontal).
+  Sin inclinación cargada se usa la automática: el borde superior del campo vertical toca el piso en el alcance.
+- Con eso se calculan la zona ciega real bajo la cámara, el alcance efectivo sobre el piso y los PPM en el
+  borde (por resolución si el modelo la tiene, o por el DORI del datasheet: identificación = 250 PPM).
+  Avisos: PPM por debajo del mínimo (parámetro, 62 = observación) y cámara que mira demasiado al piso.
+- Herramientas Muro / pared (línea) y Obstáculo (polígono): cortan la línea de vista en planta. El cono
+  se recorta en el mapa y la cobertura del perímetro los tiene en cuenta.
+- Motor: `backend/app/engine/optica.py`, `geo.visible`; pruebas en `tests/test_optica.py`.
+
 ## Orientación de dispositivos (2026-10-20)
 
 - Todo elemento puntual (cámara, gabinete, rack, UPS) tiene orientación: `properties.azimut`, grados enteros

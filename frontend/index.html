@@ -80,6 +80,16 @@
         </form>
       </section>
 
+      <section>
+        <h3>Planos e importación</h3>
+        <div id="lista-planos"></div>
+        <label class="boton edicion cargar-plano">Cargar plano (PNG, JPG o PDF)
+          <input type="file" id="inp-plano" accept=".png,.jpg,.jpeg,.pdf,image/png,image/jpeg,application/pdf" hidden></label>
+        <label class="boton edicion cargar-plano">Importar KML, KMZ o DXF
+          <input type="file" id="inp-importar" accept=".kml,.kmz,.dxf,.dwg" hidden></label>
+        <p class="ayuda" id="ayuda-plano"></p>
+      </section>
+
       <section class="edicion">
         <h3>Dibujar</h3>
         <div class="herramientas">
@@ -89,6 +99,10 @@
           <button data-herr="gabinete">Gabinete</button>
           <button data-herr="central">Rack central</button>
           <button data-herr="ups">Fuente / UPS</button>
+          <button data-herr="muro">Muro / pared</button>
+          <button data-herr="obstaculo">Obstáculo</button>
+          <button data-herr="canalizacion">Canalización</button>
+          <button data-herr="camara_paso">Cámara de paso</button>
         </div>
         <p class="ayuda" id="ayuda-herr">Elegí una herramienta y hacé clic en el mapa. Los elementos se pueden arrastrar.</p>
       </section>
@@ -170,6 +184,22 @@
     </div>
   </dialog>
 
+  <dialog id="dlg-importar">
+    <div class="dlg-cab"><h2>Importar dibujo</h2><button data-cerrar>Cerrar</button></div>
+    <div class="dlg-cuerpo una-col">
+      <div id="importar-cuerpo"></div>
+      <p class="ayuda">Los perímetros, muros y obstáculos se pueden editar después como cualquier elemento dibujado.</p>
+      <div class="fila"><button class="primario" id="btn-importar-ok">Importar</button></div>
+    </div>
+  </dialog>
+
+  <div id="barra-importar" class="barra-flotante" hidden>
+    <span id="barra-importar-texto"></span>
+    <button class="primario" id="btn-barra-importar">Importar</button>
+    <button id="btn-barra-calibrar">Calibrar de nuevo</button>
+    <button id="btn-barra-cancelar">Cancelar</button>
+  </div>
+
   <dialog id="dlg-clave">
     <div class="dlg-cab"><h2>Cambiar mi contraseña</h2><button data-cerrar>Cerrar</button></div>
     <form id="frm-clave" class="dlg-cuerpo una-col">
@@ -207,5 +237,7 @@
   <script src="/static/vendor/leaflet/leaflet.js"></script>
   <script src="/static/vendor/geoman/leaflet-geoman.min.js"></script>
   <script src="/static/app.js"></script>
+  <script src="/static/planos.js"></script>
+  <script src="/static/importar.js"></script>
 </body>
 </html>

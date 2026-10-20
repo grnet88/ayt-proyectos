@@ -11,7 +11,8 @@ import math
 import uuid
 from collections import Counter, defaultdict
 
-from .geo import Proyeccion, Recorrido, dist, en_sector
+from .geo import Proyeccion, Recorrido, dif_angular, dist, en_sector
+from .optica import NOMBRE_DORI, optica
 
 PARAMETROS_DEFAULT = {
     "modelo_camara_perimetro": "dahua-ipc-hdw3849h-as-pv-28",
@@ -19,7 +20,9 @@ PARAMETROS_DEFAULT = {
     "espaciado_m": None,  # None = 90 % del alcance de analítica del modelo
     "sentido": "trazado",  # "trazado": miran en el sentido en que se dibujó el cerco; "inverso": al revés
     "angulo_quiebre": 25.0,  # giro (°) a partir del cual un vértice es esquina y lleva cámara
-    "dist_min_camara_m": 2.0,  # zona ciega bajo la cámara
+    "dist_min_camara_m": 2.0,  # zona ciega si el modelo no informa ángulo vertical (PTZ, etc.)
+    "altura_camara_m": 4.0,  # altura de montaje por defecto
+    "ppm_minimo": 62.0,  # PPM mínimo en el borde del alcance (62 = observación DORI)
     "muestreo_cobertura_m": 1.0,
     "reserva_utp_m": 5.0,
     "limite_utp_m": 90.0,
@@ -36,7 +39,11 @@ PARAMETROS_DEFAULT = {
     "limite_caida_pct": 3.0,  # AEA: 3 % iluminación / 5 % fuerza motriz; se toma el conservador
     "margen_ups": 1.3,
     "dias_grabacion": 30,
-    "tolerancia_perimetro_m": 30.0,  # a menos de esto un elemento se considera "sobre el cerco"
+    "tolerancia_perimetro_m": 30.0,
+    "dist_camaras_paso_m": 40.0,  # en canalizaciones enterradas, además de extremos y quiebres
+    "giro_camara_paso": 45.0,  # un quiebre mayor a esto lleva cámara de paso
+    "diametro_canal_mm": 40,
+    "factor_canalizacion": 1.03,  # a menos de esto un elemento se considera "sobre el cerco"
 }
 
 
@@ -111,6 +118,63 @@ def _punto(proj: Proyeccion, xy, tipo: str, **props) -> dict:
         "geometry": {"type": "Point", "coordinates": [round(lon, 7), round(lat, 7)]},
         "properties": {"tipo": tipo, "planta": PLANTA_MAPA, **props},
     }
+
+
+# --------------------------------------------------------------------------- obra civil
+
+TIPOS_CANAL = {
+    "enterrada": "Canalización enterrada (caño PEAD)",
+    "aerea": "Canalización aérea sobre cerco o postes (caño galvanizado)",
+    "pared": "Canalización sobre pared o bandeja",
+}
+MEDIDA_CAMARA_PASO = "40x40"
+
+
+def camaras_de_paso(rec: Recorrido, p: dict) -> list[float]:
+    """Progresivas de las cámaras de paso de una canalización enterrada: extremos, quiebres
+    pronunciados y cada `dist_camaras_paso_m` entre ellas."""
+    fijas = [0.0] if not rec.cerrado else []
+    for i in range(1, len(rec.pts) - 1):
+        giro = dif_angular(rec.punto(rec.acum[i] - 1e-6)[1], rec.punto(rec.acum[i] + 1e-6)[1])
+        if giro >= p["giro_camara_paso"]:
+            fijas.append(rec.acum[i])
+    if rec.cerrado and not fijas:
+        fijas.append(0.0)
+    fijas.append(rec.largo)
+    resultado = []
+    paso = float(p["dist_camaras_paso_m"])
+    for a, b in zip(fijas, fijas[1:]):
+        resultado.append(a)
+        n = math.ceil((b - a) / paso - 0.01) if paso > 0 else 1  # tolera centímetros de redondeo
+        resultado += [a + (b - a) * k / n for k in range(1, n)]
+    if not rec.cerrado:
+        resultado.append(rec.largo)
+    return resultado
+
+
+def obra_civil(proyecto: dict, proj: Proyeccion, p: dict) -> dict:
+    canales, camaras_paso = [], []
+    manuales = [_xy(proj, f) for f in _por_tipo(proyecto, "camara_paso")]
+    for f in _por_tipo(proyecto, "canalizacion"):
+        coords, cerrado = _anillo(f)
+        rec = Recorrido([proj.a_xy(c[1], c[0]) for c in coords], cerrado)
+        props = f["properties"]
+        tipo = props.get("tipo_canal") if props.get("tipo_canal") in TIPOS_CANAL else "enterrada"
+        cps = []
+        if tipo == "enterrada" and rec.largo > 0:
+            for s in camaras_de_paso(rec, p):
+                xy = rec.punto(s)[0]
+                if all(dist(xy, m) > 5 for m in manuales) and all(dist(xy, c) > 1 for c in camaras_paso + cps):
+                    cps.append(xy)
+        camaras_paso += cps
+        canales.append({
+            "id": f["id"], "nombre": props.get("nombre", ""), "tipo": tipo, "largo_m": round(rec.largo, 1),
+            "diametro_mm": int(props.get("diametro_mm") or p["diametro_canal_mm"]), "cruce": bool(props.get("cruce")),
+            "camaras_paso": [[round(v, 7) for v in reversed(proj.a_latlon(*xy))] for xy in cps],
+        })
+    medidas = Counter(f["properties"].get("medida") or MEDIDA_CAMARA_PASO for f in _por_tipo(proyecto, "camara_paso"))
+    return {"canalizaciones": canales, "camaras_paso_auto": len(camaras_paso), "camaras_paso_manuales": len(manuales),
+            "medidas_manuales": dict(medidas)}
 
 
 # --------------------------------------------------------------------------- distribución
@@ -334,16 +398,33 @@ def calcular(proyecto: dict, catalogo: dict[str, dict]) -> dict:
                 adv.append(f"{e['fuente']}: la carga ({req:.0f} VA con margen) supera las UPS del catálogo.")
             energia.append(e)
 
-    # ---------------- cobertura sobre el perímetro
-    cobertura = {"pct": None, "huecos": [], "largo_m": round(sum(r.largo for r in recorridos), 1)}
+    # ---------------- óptica de cada cámara y bloqueos (muros, obstáculos)
+    bloqueos = []
+    for f in _por_tipo(proyecto, "muro") + _por_tipo(proyecto, "obstaculo"):
+        coords, cerrado = _anillo(f)
+        pts = [proj.a_xy(c[1], c[0]) for c in coords]
+        if cerrado and pts and pts[0] != pts[-1]:
+            pts.append(pts[0])
+        bloqueos += list(zip(pts, pts[1:]))
+    det_cam = []
     sectores = []
     for c in camaras:
         m = catalogo.get(c["properties"].get("modelo"))
         if not m:
             continue
-        alcance = c["properties"].get("alcance") or m["alcance_analitica_m"]
+        o = optica(c["properties"], m, p)
+        det_cam.append({"id": c["id"], "nombre": c["properties"].get("nombre", ""), **o})
         sectores.append((u_cam[c["id"]][0], float(c["properties"].get("azimut", 0)), m["hfov"],
-                         p["dist_min_camara_m"], float(alcance)))
+                         o["zona_ciega_m"], o["alcance_efectivo_m"]))
+        if o["ppm_borde"] is not None and o["ppm_borde"] < p["ppm_minimo"]:
+            adv.append(f"{c['properties'].get('nombre', c['id'])}: {o['ppm_borde']} PPM en el borde del alcance "
+                       f"({o['alcance_efectivo_m']} m), por debajo de {p['ppm_minimo']:g}. Acortá el alcance o usá otra lente.")
+        if o["borde_lejano_m"] is not None and o["borde_lejano_m"] < o["alcance_m"] * 0.8:
+            adv.append(f"{c['properties'].get('nombre', c['id'])}: con {o['inclinacion']}° de inclinación ve el piso solo "
+                       f"hasta {o['borde_lejano_m']} m de los {o['alcance_m']:g} m de alcance. Levantala o subí la altura.")
+
+    # ---------------- cobertura sobre el perímetro
+    cobertura = {"pct": None, "huecos": [], "largo_m": round(sum(r.largo for r in recorridos), 1)}
     if recorridos:
         paso = max(0.25, float(p["muestreo_cobertura_m"]))
         cubierto_total = 0.0
@@ -353,7 +434,7 @@ def calcular(proyecto: dict, catalogo: dict[str, dict]) -> dict:
             for i in range(n + (0 if r.cerrado else 1)):
                 s = min(i * paso, r.largo)
                 xy, _ = r.punto(s)
-                estado.append((s, any(en_sector(o, az, hf, dmin, dmax, xy) for o, az, hf, dmin, dmax in sectores)))
+                estado.append((s, any(en_sector(o, az, hf, dmin, dmax, xy, bloqueos) for o, az, hf, dmin, dmax in sectores)))
             cubierto_total += sum(1 for _, ok in estado if ok) / len(estado) * r.largo
             # agrupar huecos contiguos
             hueco = None
@@ -362,7 +443,7 @@ def calcular(proyecto: dict, catalogo: dict[str, dict]) -> dict:
                     hueco = s
                 elif ok and hueco is not None:
                     if s - hueco >= paso * 2:
-                        pts = [r.punto(hueco + (s - hueco) * k / 8)[0] for k in range(9)]
+                        pts = r.tramo(hueco, min(s, r.largo))
                         cobertura["huecos"].append({
                             "desde_m": round(hueco, 1), "largo_m": round(s - hueco, 1),
                             "coords": [list(reversed([round(v, 7) for v in proj.a_latlon(*q)])) for q in pts],
@@ -415,6 +496,23 @@ def calcular(proyecto: dict, catalogo: dict[str, dict]) -> dict:
     for uid, cant in Counter(e["ups_id"] for e in energia if e.get("ups_id")).most_common():
         item("Energía", "UPS", cant, modelo=catalogo[uid]["modelo"])
 
+    oc = obra_civil(proyecto, proj, p)
+    por_tipo_canal: dict[tuple, float] = defaultdict(float)
+    for c in oc["canalizaciones"]:
+        if not c["cruce"]:
+            por_tipo_canal[(c["tipo"], c["diametro_mm"])] += c["largo_m"]
+    for (tipo, diam), largo in sorted(por_tipo_canal.items()):
+        item("Obra civil", f"{TIPOS_CANAL[tipo]} Ø{diam} mm", math.ceil(largo * p["factor_canalizacion"]), "m")
+        if tipo == "enterrada":
+            item("Obra civil", "Zanjeo, tapada y señalización", math.ceil(largo), "m")
+    cruces = [c for c in oc["canalizaciones"] if c["cruce"]]
+    item("Obra civil", "Cruce de calzada (perforación dirigida o rotura y reparación)",
+         math.ceil(sum(c["largo_m"] for c in cruces)), "m")
+    medidas = Counter(oc["medidas_manuales"])
+    medidas[MEDIDA_CAMARA_PASO] += oc["camaras_paso_auto"]
+    for medida, cant in sorted(medidas.items()):
+        item("Obra civil", f"Cámara de paso {medida} cm con tapa", cant)
+
     resumen = {
         "perimetro_m": cobertura["largo_m"],
         "camaras": len(camaras),
@@ -426,5 +524,5 @@ def calcular(proyecto: dict, catalogo: dict[str, dict]) -> dict:
         "mbps_total": red["mbps_total"],
         "almacenamiento_tb": red["almacenamiento_tb"],
     }
-    return {"resumen": resumen, "advertencias": adv, "gabinetes": det_gab, "fibra": fibra,
-            "energia": energia, "cobertura": cobertura, "red": red, "materiales": lista, "parametros": p}
+    return {"resumen": resumen, "advertencias": adv, "gabinetes": det_gab, "camaras": det_cam, "fibra": fibra,
+            "energia": energia, "cobertura": cobertura, "red": red, "obra_civil": oc, "materiales": lista, "parametros": p}

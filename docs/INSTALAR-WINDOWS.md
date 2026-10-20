@@ -47,7 +47,7 @@ detenido (o programar una copia diaria). Actualizar la aplicación no toca esa c
 
 ## Actualizar
 
-Con Git: `git pull` en la carpeta y reiniciar el servidor. Sin Git: descomprimir la versión nueva encima,
+Con Git: `git pull` en la carpeta y reiniciar el servidor (al arrancar instala solo las librerías nuevas). Sin Git: descomprimir la versión nueva encima,
 sin borrar la carpeta `datos`.
 
 ## Notas

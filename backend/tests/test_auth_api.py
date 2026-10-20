@@ -121,3 +121,25 @@ def test_migracion_desde_prototipo(tmp_path, monkeypatch):
     e = db.obtener_escenario(p["escenarios"][0]["id"])
     assert e["elementos"][0]["properties"]["planta"] == "exterior"
     assert e["parametros"] == {"seccion_mm2": 16}
+
+
+def test_planos_carga_lectura_y_borrado(cliente):
+    import base64
+    configurar(cliente)
+    ingresar(cliente)
+    p = cliente.post("/api/proyectos", json={"nombre": "Con plano"}).json()
+    png = b"\x89PNG\r\n\x1a\n" + b"\x00" * 64
+    url = "data:image/png;base64," + base64.b64encode(png).decode()
+    r = cliente.post(f"/api/proyectos/{p['id']}/planos", json={"nombre": "Planta baja", "imagen": url, "ancho": 10, "alto": 5})
+    assert r.status_code == 200, r.text
+    plano = r.json()["planos"][0]
+    assert plano["nombre"] == "Planta baja" and plano["georef"] is None
+    assert cliente.get(f"/api/proyectos/{p['id']}/planos/{plano['archivo']}").content == png
+    # no acepta otros formatos ni rutas fuera de la carpeta
+    gif = "data:image/gif;base64," + base64.b64encode(b"GIF89a....").decode()
+    assert cliente.post(f"/api/proyectos/{p['id']}/planos", json={"imagen": gif}).status_code == 422
+    cliente.put(f"/api/proyectos/{p['id']}", json={"planos": [{**plano, "archivo": "../prueba.db"}]})
+    assert cliente.get(f"/api/proyectos/{p['id']}/planos/..%2Fprueba.db").status_code == 404
+    cliente.put(f"/api/proyectos/{p['id']}", json={"planos": [plano]})
+    assert cliente.delete(f"/api/proyectos/{p['id']}/planos/{plano['id']}").json()["planos"] == []
+    assert cliente.get(f"/api/proyectos/{p['id']}/planos/{plano['archivo']}").status_code == 404
