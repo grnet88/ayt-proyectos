@@ -97,3 +97,23 @@ fieldset { border: 1px solid var(--borde); border-radius: 6px; margin: 8px 0; }
   #panel-izq, #panel-der { border: 0; }
   .dlg-cuerpo { grid-template-columns: 1fr; }
 }
+
+.acceso { position: fixed; inset: 0; z-index: 2000; display: flex; align-items: center; justify-content: center; background: var(--fondo); padding: 16px; }
+.tarjeta { width: min(420px, 100%); background: var(--panel); border: 1px solid var(--borde); border-radius: 10px; padding: 20px 24px; }
+.tarjeta h1 { font-size: 20px; margin: 0 0 12px; }
+.tarjeta button.primario { margin-top: 12px; }
+.error { color: var(--peligro); min-height: 1em; }
+.clave { display: flex; gap: 6px; margin-top: 2px; }
+.clave input { flex: 1; min-width: 0; margin: 0; }
+.grupo { display: inline-flex; gap: 4px; }
+.menu-usuario { position: relative; }
+.menu { position: absolute; right: 0; top: calc(100% + 4px); z-index: 1500; display: flex; flex-direction: column; gap: 4px;
+  background: var(--panel); border: 1px solid var(--borde); border-radius: 8px; padding: 6px; min-width: 200px; }
+.menu[hidden] { display: none; }
+.menu button { text-align: left; }
+.dlg-cuerpo.una-col { grid-template-columns: 1fr; }
+.etiqueta { font-size: 11px; padding: 1px 6px; border-radius: 10px; border: 1px solid var(--borde); color: var(--suave); }
+body.solo-lectura .edicion { display: none !important; }
+body:not(.es-admin) .solo-admin { display: none !important; }
+fieldset[hidden] { display: none; }
+.acceso[hidden], form[hidden] { display: none; }

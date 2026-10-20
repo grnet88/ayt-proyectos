@@ -1,20 +1,20 @@
-# Plan por etapas
+# Plan por etapas (v2)
 
-Basado en `Descripcion.docx` (especificación de Gastón). Las carpetas de obras (Barrios Privados,
-Empresas, Parques Industriales) son referencia de criterios de diseño. Los presupuestos se hacen en
-otro sistema y quedan fuera de esta aplicación.
+Basado en `Descripcion.docx`, `Descripcion v2.docx` y el Detalle de Gastón. Plan completo, revisión de los
+documentos y estimación: https://claude.ai/artifact/5HiQyBKQmkeoyETob9Wa8C
 
-1. **Diseño sobre mapa satelital** (en curso): perímetro, cámaras con cono de visión, cobertura y
-   puntos ciegos, gabinetes, fibra, energía y listado de equipos.
-2. **Catálogo completo**: Dahua, Hikvision, Cygnus y otras marcas; importar datos desde datasheet
-   (PDF); reemplazar un equipo por otro y recalcular el diseño.
-3. **Ingeniería de red y energía**: GPON (splitters, presupuesto óptico) o anillo; switches core;
-   ancho de banda interno e internet, IP pública; caída de tensión por norma vigente (AEA 90364);
-   gabinetes y tableros típicos con esquemas; centrales de monitoreo dimensionadas.
-4. **Planos y fotos**: superponer PDF, imágenes y DWG/DXF calibrando escala; vectorizar; más
-   adelante reconocimiento asistido de elementos; obra civil (columnas, brazos, canalizaciones,
-   cámaras de paso dimensionadas).
-5. **Usuarios, documentos e informes**: superadministrador fijo, roles, visor para clientes,
-   almacenamiento de documentos por proyecto, informe técnico y planos exportables.
-6. **Instalable y móvil**: instalador Windows/Linux; app Android de relevamiento con fotos,
-   ubicación GPS y notas que se integran al proyecto; análisis de imágenes de cámaras existentes.
+Cada etapa se cierra con una prueba de aceptación sobre una obra real y con todas las pruebas automáticas en verde.
+
+| Etapa | Qué incluye | Prueba de aceptación |
+| --- | --- | --- |
+| 0. Cimientos (hecho, v0.2) | Modelo con escenarios y plantas, usuarios y roles, visor, llave de recuperación | Visor sin edición; proyecto v0.1 migrado sin pérdida |
+| 1. Exterior completo | Altura e inclinación, PPM y zona ciega, muros y obstáculos, canalizaciones, planos calibrados, KML/KMZ, DXF | Cinco Lagos ABC contra el diseño real (85 cámaras, 21 gabinetes) |
+| 2. Energía, fibra y red | Auto-sección AEA, UPS con autonomía, nodo solar, presupuesto óptico GPON, IP/VLAN/puertos | 3 ramales eléctricos y 2 ramas GPON de Cadaques, diferencia < 2 % |
+| 3. Cómputo y escenarios | Listado editable con candado, ítems libres, etapas de obra, reemplazo masivo | Cantidades de los 3 presupuestos de Cinco Lagos como 3 etapas |
+| 3b. Costos y abono (opcional) | Costo por ítem, estimación por obra y etapa, precio final, abono y condiciones para el exportado | Total de una obra ya cotizada contra la cotización real |
+| 4. Exportación | Word con el modelo de los Hoteles en versión digital e imprimible (fondos claros), Excel multihoja, DXF por capas | Carpeta técnica de Cadaques; DXF abre en AutoCAD |
+| 5. Porterías, edificios y Wi-Fi | CAS por carril, multi-planta, Wi-Fi, COM, servidores y RAID | Hotel El Libertador y portería de Cinco Lagos |
+| 6. Láminas | Gabinete en riel DIN, rack por U, poste, unifilar | Revisión de las láminas de Cinco Lagos |
+| 7. Catálogo | Multimarca, equivalencias, importador asistido de datasheets | 10 datasheets cargados y verificados |
+| 8. Campo | App móvil sin conexión, recorrido, fotos con GPS | Relevamiento real visto en el proyecto |
+| 9. Instalador | Windows y Linux, copias de seguridad | Instalación en PC limpia sin ayuda |

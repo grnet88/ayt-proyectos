@@ -9,10 +9,38 @@
   <link rel="stylesheet" href="/static/estilos.css">
 </head>
 <body>
+  <div id="pantalla-acceso" class="acceso" hidden>
+    <div class="tarjeta">
+      <h1>AyT Proyectos</h1>
+      <form id="frm-inicial" hidden>
+        <p>Configuración inicial. Definí la contraseña del superadministrador <b>aytroot</b>.</p>
+        <label>Contraseña <span class="clave"><input name="clave" type="password" autocomplete="new-password" required><button type="button" class="ver">Mostrar</button></span></label>
+        <label>Repetir contraseña <span class="clave"><input name="clave2" type="password" autocomplete="new-password" required><button type="button" class="ver">Mostrar</button></span></label>
+        <button class="primario">Crear superadministrador</button>
+        <p class="ayuda">Mínimo 8 caracteres. Al terminar se descarga la llave de recuperación: guardala fuera de esta PC.</p>
+      </form>
+      <form id="frm-ingreso" hidden>
+        <label>Usuario <input name="usuario" autocomplete="username" required></label>
+        <label>Contraseña <span class="clave"><input name="clave" type="password" autocomplete="current-password" required><button type="button" class="ver">Mostrar</button></span></label>
+        <button class="primario">Ingresar</button>
+        <p class="ayuda"><a href="#" id="lnk-recuperar">Recuperar acceso de aytroot con la llave</a></p>
+      </form>
+      <form id="frm-recuperar" hidden>
+        <p>Recuperación de emergencia de <b>aytroot</b>. Solo funciona desde la PC donde corre el servidor.</p>
+        <label>Archivo de llave <input name="llave" type="file" accept=".key,.txt" required></label>
+        <label>Contraseña nueva <span class="clave"><input name="clave" type="password" autocomplete="new-password" required><button type="button" class="ver">Mostrar</button></span></label>
+        <label>Repetir contraseña <span class="clave"><input name="clave2" type="password" autocomplete="new-password" required><button type="button" class="ver">Mostrar</button></span></label>
+        <button class="primario">Recuperar acceso</button>
+        <p class="ayuda">La llave usada deja de valer y se descarga una nueva. <a href="#" id="lnk-volver">Volver</a></p>
+      </form>
+      <p id="msg-acceso" class="error"></p>
+    </div>
+  </div>
+
   <header>
     <strong class="marca">AyT Proyectos</strong>
     <select id="sel-proyecto" title="Proyecto"></select>
-    <button id="btn-nuevo">Nuevo</button>
+    <button id="btn-nuevo" class="edicion">Nuevo</button>
     <input id="inp-nombre" placeholder="Nombre del proyecto">
     <input id="inp-cliente" placeholder="Cliente">
     <select id="sel-categoria" title="Categoría">
@@ -22,11 +50,24 @@
       <option>Parques Industriales</option>
       <option>Otro</option>
     </select>
+    <span class="grupo">
+      <select id="sel-escenario" title="Escenario o etapa"></select>
+      <button id="btn-escenarios" class="edicion" title="Opciones y etapas">Opciones</button>
+    </span>
+    <select id="sel-planta" title="Planta"></select>
     <span id="estado" class="estado"></span>
     <span class="espacio"></span>
     <button id="btn-catalogo">Catálogo</button>
     <a id="lnk-csv" class="boton" href="#" download>Exportar listado</a>
-    <button id="btn-borrar" class="peligro" title="Borrar proyecto">Borrar</button>
+    <button id="btn-borrar" class="peligro edicion" title="Borrar proyecto">Borrar</button>
+    <span class="menu-usuario">
+      <button id="btn-usuario"></button>
+      <span id="menu-usuario" class="menu" hidden>
+        <button id="btn-mi-clave">Cambiar mi contraseña</button>
+        <button id="btn-usuarios" class="solo-admin">Usuarios y llave</button>
+        <button id="btn-salir">Salir</button>
+      </span>
+    </span>
   </header>
 
   <main>
@@ -39,7 +80,7 @@
         </form>
       </section>
 
-      <section>
+      <section class="edicion">
         <h3>Dibujar</h3>
         <div class="herramientas">
           <button data-herr="perimetro">Perímetro cerrado</button>
@@ -52,7 +93,7 @@
         <p class="ayuda" id="ayuda-herr">Elegí una herramienta y hacé clic en el mapa. Los elementos se pueden arrastrar.</p>
       </section>
 
-      <section>
+      <section class="edicion">
         <h3>Distribuir sobre el perímetro</h3>
         <label>Modelo de cámara <select id="dist-modelo"></select></label>
         <label>Espaciado (m) <input id="dist-esp" type="number" step="0.5" placeholder="automático"></label>
@@ -143,6 +184,56 @@
           <button type="button" id="btn-modelo-limpiar">Limpiar</button>
         </div>
         <p class="ayuda">Los modelos base se pueden duplicar y ajustar. Los cargados por vos se pueden editar o borrar.</p>
+      </form>
+    </div>
+  </dialog>
+
+
+  <dialog id="dlg-escenarios">
+    <div class="dlg-cab"><h2>Opciones y etapas del proyecto</h2><button data-cerrar>Cerrar</button></div>
+    <div class="dlg-cuerpo una-col">
+      <p class="ayuda">Cada opción o etapa tiene sus propios equipos, parámetros y cómputo, sobre el mismo mapa.
+        Ejemplos: "Opción A, base TiOC" y "Opción B, con térmicas", o "Etapa 1, porterías" y "Etapa 2, perímetro norte".</p>
+      <div id="lista-escenarios"></div>
+      <form id="frm-escenario" class="fila">
+        <input name="nombre" placeholder="Nombre" required>
+        <select name="tipo"><option value="alternativa">Opción</option><option value="etapa">Etapa de obra</option></select>
+        <select name="copiar"><option value="actual">Copiar la actual</option><option value="">Vacía</option></select>
+        <button class="primario">Agregar</button>
+      </form>
+    </div>
+  </dialog>
+
+  <dialog id="dlg-clave">
+    <div class="dlg-cab"><h2>Cambiar mi contraseña</h2><button data-cerrar>Cerrar</button></div>
+    <form id="frm-clave" class="dlg-cuerpo una-col">
+      <label>Contraseña actual <span class="clave"><input name="actual" type="password" required><button type="button" class="ver">Mostrar</button></span></label>
+      <label>Contraseña nueva <span class="clave"><input name="nueva" type="password" required><button type="button" class="ver">Mostrar</button></span></label>
+      <label>Repetir nueva <span class="clave"><input name="nueva2" type="password" required><button type="button" class="ver">Mostrar</button></span></label>
+      <button class="primario">Guardar</button>
+    </form>
+  </dialog>
+
+  <dialog id="dlg-usuarios">
+    <div class="dlg-cab"><h2>Usuarios</h2><button data-cerrar>Cerrar</button></div>
+    <div class="dlg-cuerpo">
+      <div>
+        <div id="tabla-usuarios"></div>
+        <h3>Llave de recuperación</h3>
+        <p class="ayuda">Si perdés la contraseña de aytroot, con este archivo y desde la PC del servidor podés definir una nueva.
+          Generar una llave nueva invalida la anterior.</p>
+        <button id="btn-nueva-llave">Generar y descargar llave nueva</button>
+      </div>
+      <form id="frm-usuario">
+        <h3 id="frm-usuario-titulo">Nuevo usuario</h3>
+        <input type="hidden" name="id">
+        <label>Usuario <input name="usuario" required></label>
+        <label>Nombre <input name="nombre"></label>
+        <label>Rol <select name="rol"></select></label>
+        <label>Contraseña <span class="clave"><input name="clave" type="password" autocomplete="new-password"><button type="button" class="ver">Mostrar</button></span></label>
+        <fieldset data-rol="visor"><legend>Proyectos que puede ver</legend><div id="usuario-proyectos"></div></fieldset>
+        <div class="fila"><button class="primario">Guardar</button><button type="button" id="btn-usuario-limpiar">Limpiar</button></div>
+        <p class="ayuda">Al editar, dejá la contraseña vacía para no cambiarla.</p>
       </form>
     </div>
   </dialog>

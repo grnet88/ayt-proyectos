@@ -1,4 +1,4 @@
-/* AyT Proyectos — interfaz de diseño sobre mapa (prototipo etapa 1). */
+/* AyT Proyectos — interfaz de diseño (v0.2: usuarios, escenarios y plantas). */
 "use strict";
 
 const api = async (metodo, ruta, cuerpo) => {
@@ -7,6 +7,10 @@ const api = async (metodo, ruta, cuerpo) => {
     headers: cuerpo ? { "Content-Type": "application/json" } : {},
     body: cuerpo ? JSON.stringify(cuerpo) : undefined,
   });
+  if (r.status === 401 && !ruta.startsWith("/api/ingresar")) {
+    mostrarAcceso("ingreso", "Tu sesión terminó. Volvé a ingresar.");
+    throw new Error("Sesión no iniciada");
+  }
   if (!r.ok) {
     let msg = r.statusText;
     try { msg = (await r.json()).detail || msg; } catch (_) { /* sin cuerpo */ }
@@ -37,7 +41,11 @@ const ETIQUETAS_PARAM = {
 };
 
 const estado = {
+  usuario: null,
+  soloLectura: false,
   proyecto: null,
+  escenario: null,
+  planta: "exterior",
   catalogo: {},
   defaults: {},
   herramienta: null,
@@ -89,10 +97,11 @@ function sector(lat, lon, az, hfov, r, rmin) {
 
 // --------------------------------------------------------------------------- elementos
 
-const elementos = () => estado.proyecto?.elementos || [];
+const enPlanta = (f) => (f.properties.planta || "exterior") === estado.planta;
+const elementos = () => (estado.escenario?.elementos || []).filter(enPlanta);
 const porTipo = (t) => elementos().filter((f) => f.properties.tipo === t);
 const buscar = (id) => elementos().find((f) => f.id === id);
-const param = (k) => estado.proyecto?.parametros?.[k] ?? estado.defaults[k];
+const param = (k) => estado.escenario?.parametros?.[k] ?? estado.defaults[k];
 
 function iconoPara(f) {
   const t = f.properties.tipo, sel = estado.seleccion === f.id ? " sel" : "";
@@ -151,7 +160,7 @@ function dibujar() {
         (pts ? L.polygon(pts, opciones) : L.circle([lat, lon], { ...opciones, radius: r, dashArray: "4 4" })).addTo(capaSectores);
       }
     }
-    const mk = L.marker([lat, lon], { icon: iconoPara(f), draggable: true, title: f.properties.nombre || f.properties.tipo });
+    const mk = L.marker([lat, lon], { icon: iconoPara(f), draggable: !estado.soloLectura, title: f.properties.nombre || f.properties.tipo });
     mk.on("click", (e) => { L.DomEvent.stopPropagation(e); seleccionar(f.id); });
     mk.on("dragend", () => {
       const p = mk.getLatLng();
@@ -185,7 +194,7 @@ function seleccionar(id) {
 
 function agregarPunto(tipo, latlng) {
   const n = porTipo(tipo).length + 1;
-  const props = { tipo };
+  const props = { tipo, planta: estado.planta };
   if (tipo === "camara") Object.assign(props, { nombre: `CAM M${String(n).padStart(2, "0")}`, modelo: $("#dist-modelo").value, azimut: 0 });
   if (tipo === "gabinete") props.nombre = `GAB M${String(n).padStart(2, "0")}`;
   if (tipo === "central") props.nombre = "Rack central";
@@ -195,13 +204,13 @@ function agregarPunto(tipo, latlng) {
     return;
   }
   const f = { type: "Feature", id: uid(tipo.slice(0, 3)), geometry: { type: "Point", coordinates: [round7(latlng.lng), round7(latlng.lat)] }, properties: props };
-  estado.proyecto.elementos.push(f);
+  estado.escenario.elementos.push(f);
   seleccionar(f.id);
   cambio();
 }
 
 function borrar(id) {
-  estado.proyecto.elementos = elementos().filter((f) => f.id !== id);
+  estado.escenario.elementos = estado.escenario.elementos.filter((f) => f.id !== id);
   for (const c of porTipo("camara")) if (c.properties.gabinete === id) delete c.properties.gabinete;
   estado.seleccion = null;
   inspector();
@@ -231,14 +240,15 @@ function usarHerramienta(h) {
 mapa.on("pm:create", (e) => {
   const gj = e.layer.toGeoJSON().geometry;
   mapa.removeLayer(e.layer);
-  const f = { type: "Feature", id: uid("per"), geometry: gj, properties: { tipo: "perimetro", nombre: `Perímetro ${porTipo("perimetro").length + 1}` } };
-  estado.proyecto.elementos.push(f);
+  const f = { type: "Feature", id: uid("per"), geometry: gj, properties: { tipo: "perimetro", planta: estado.planta, nombre: `Perímetro ${porTipo("perimetro").length + 1}` } };
+  estado.escenario.elementos.push(f);
   usarHerramienta(null);
   seleccionar(f.id);
   cambio();
 });
 
 mapa.on("click", (e) => {
+  if (estado.soloLectura) return;
   if (["camara", "gabinete", "central", "ups"].includes(estado.herramienta)) agregarPunto(estado.herramienta, e.latlng);
   else if (!estado.herramienta && estado.seleccion) seleccionar(null);
 });
@@ -246,7 +256,7 @@ mapa.on("click", (e) => {
 document.querySelectorAll("[data-herr]").forEach((b) => b.addEventListener("click", () => usarHerramienta(b.dataset.herr)));
 document.addEventListener("keydown", (e) => {
   if (e.key === "Escape") usarHerramienta(null);
-  if (e.key === "Delete" && estado.seleccion && !/INPUT|SELECT|TEXTAREA/.test(document.activeElement.tagName)) borrar(estado.seleccion);
+  if (e.key === "Delete" && !estado.soloLectura && estado.seleccion && !/INPUT|SELECT|TEXTAREA/.test(document.activeElement.tagName)) borrar(estado.seleccion);
 });
 
 // --------------------------------------------------------------------------- inspector
@@ -280,11 +290,12 @@ function inspector() {
   if (p.tipo === "perimetro") {
     const c = estado.calculo?.cobertura;
     html += `<p class="ayuda">${f.geometry.type === "Polygon" ? "Cerrado" : "Abierto"}${c ? ` · ${fmt(c.largo_m)} m en total` : ""}</p>
-      <button id="btn-vertices">${estado.editandoVertices ? "Terminar edición" : "Editar vértices"}</button>`;
+      <button id="btn-vertices" class="edicion">${estado.editandoVertices ? "Terminar edición" : "Editar vértices"}</button>`;
   }
   if (p.auto) html += `<p class="ayuda">Generado automáticamente. Si lo modificás, pasa a ser manual y se conserva al redistribuir.</p>`;
-  html += `<div class="fila" style="margin-top:8px"><button class="peligro" id="btn-borrar-el">Borrar elemento</button></div>`;
+  html += `<div class="fila edicion" style="margin-top:8px"><button class="peligro" id="btn-borrar-el">Borrar elemento</button></div>`;
   cuerpo.innerHTML = html;
+  if (estado.soloLectura) cuerpo.querySelectorAll("input, select").forEach((el) => { el.disabled = true; });
 
   cuerpo.querySelectorAll("[data-prop]").forEach((inp) => inp.addEventListener("input", () => {
     const k = inp.dataset.prop;
@@ -353,29 +364,36 @@ function resultados() {
 function marcarEstado(t) { $("#estado").textContent = t; }
 
 function cambio() {
+  if (estado.soloLectura) return;
   marcarEstado("Sin guardar…");
   clearTimeout(estado.guardando);
   estado.guardando = setTimeout(guardar, 500);
 }
 
 async function guardar() {
-  const p = estado.proyecto;
-  if (!p) return;
+  const e = estado.escenario;
+  if (!e || estado.soloLectura) return;
   try {
     marcarEstado("Guardando…");
-    await api("PUT", `/api/proyectos/${p.id}`, p);
+    await api("PUT", `/api/escenarios/${e.id}`, { elementos: e.elementos, parametros: e.parametros, computo: e.computo });
     marcarEstado("Guardado");
     await recalcular();
-  } catch (e) {
+  } catch (err) {
     marcarEstado("Error al guardar");
-    console.error(e);
+    console.error(err);
   }
 }
 
+async function guardarProyecto(cambios) {
+  if (estado.soloLectura) return;
+  Object.assign(estado.proyecto, cambios);
+  await api("PUT", `/api/proyectos/${estado.proyecto.id}`, cambios);
+}
+
 async function recalcular() {
-  if (!estado.proyecto) return;
+  if (!estado.escenario) return;
   try {
-    estado.calculo = await api("GET", `/api/proyectos/${estado.proyecto.id}/calculo`);
+    estado.calculo = await api("GET", `/api/escenarios/${estado.escenario.id}/calculo`);
   } catch (e) {
     estado.calculo = null;
     console.error(e);
@@ -387,6 +405,9 @@ async function recalcular() {
 
 // --------------------------------------------------------------------------- proyectos
 
+const recordar = (k, v) => { try { localStorage.setItem(k, v); } catch (_) { /* sin almacenamiento */ } };
+const recuerdo = (k) => { try { return localStorage.getItem(k); } catch (_) { return null; } };
+
 async function listarProyectos(seleccionar_id) {
   const lista = await api("GET", "/api/proyectos");
   $("#sel-proyecto").innerHTML = lista.map((p) => `<option value="${esc(p.id)}">${esc(p.nombre)}${p.cliente ? " · " + esc(p.cliente) : ""}</option>`).join("");
@@ -394,17 +415,39 @@ async function listarProyectos(seleccionar_id) {
   return lista;
 }
 
+function selectorEscenarios() {
+  const p = estado.proyecto;
+  $("#sel-escenario").innerHTML = p.escenarios.map((e) =>
+    `<option value="${esc(e.id)}">${esc(e.nombre)}${e.tipo === "etapa" ? " (etapa)" : ""}</option>`).join("");
+  if (estado.escenario) $("#sel-escenario").value = estado.escenario.id;
+  $("#sel-planta").innerHTML = (p.plantas || [{ id: "exterior", nombre: "Exterior" }]).map((pl) =>
+    `<option value="${esc(pl.id)}">${esc(pl.nombre)}</option>`).join("");
+  $("#sel-planta").value = estado.planta;
+  $("#sel-planta").title = "Planta. Los pisos de edificios con plano propio llegan en la etapa 5.";
+}
+
 async function abrir(id) {
   estado.proyecto = await api("GET", `/api/proyectos/${id}`);
-  estado.seleccion = null;
-  estado.calculo = null;
   const p = estado.proyecto;
   $("#inp-nombre").value = p.nombre || "";
   $("#inp-cliente").value = p.cliente || "";
   $("#sel-categoria").value = p.categoria || "";
-  $("#lnk-csv").href = `/api/proyectos/${p.id}/materiales.csv`;
   if (p.vista) mapa.setView(p.vista.centro, p.vista.zoom);
-  try { localStorage.setItem("ayt-ultimo", id); } catch (_) { /* sin almacenamiento */ }
+  recordar("ayt-ultimo", id);
+  const previo = recuerdo(`ayt-escenario-${id}`);
+  await abrirEscenario(p.escenarios.some((e) => e.id === previo) ? previo : p.escenarios[0].id);
+}
+
+async function abrirEscenario(eid) {
+  clearTimeout(estado.guardando);
+  estado.escenario = await api("GET", `/api/escenarios/${eid}`);
+  estado.escenario.parametros ||= {};
+  estado.seleccion = null;
+  estado.calculo = null;
+  estado.planta = "exterior";
+  recordar(`ayt-escenario-${estado.proyecto.id}`, eid);
+  $("#lnk-csv").href = `/api/escenarios/${eid}/materiales.csv`;
+  selectorEscenarios();
   formularioParametros();
   inspector();
   dibujar();
@@ -416,22 +459,23 @@ async function nuevo() {
   const nombre = prompt("Nombre del proyecto", "Proyecto nuevo");
   if (nombre === null) return;
   const c = mapa.getCenter();
-  const p = await api("POST", "/api/proyectos", { nombre, elementos: [], parametros: {}, vista: { centro: [c.lat, c.lng], zoom: mapa.getZoom() } });
+  const p = await api("POST", "/api/proyectos", { nombre, vista: { centro: [c.lat, c.lng], zoom: mapa.getZoom() } });
   await listarProyectos(p.id);
   await abrir(p.id);
 }
 
 $("#btn-nuevo").onclick = nuevo;
 $("#sel-proyecto").onchange = (e) => abrir(e.target.value);
+$("#sel-escenario").onchange = (e) => abrirEscenario(e.target.value);
+$("#sel-planta").onchange = (e) => { estado.planta = e.target.value; estado.seleccion = null; inspector(); dibujar(); };
 for (const [sel, k] of [["#inp-nombre", "nombre"], ["#inp-cliente", "cliente"], ["#sel-categoria", "categoria"]]) {
   $(sel).addEventListener("change", async (e) => {
-    estado.proyecto[k] = e.target.value;
-    await guardar();
+    await guardarProyecto({ [k]: e.target.value });
     await listarProyectos(estado.proyecto.id);
   });
 }
 $("#btn-borrar").onclick = async () => {
-  if (!estado.proyecto || !confirm(`¿Borrar el proyecto "${estado.proyecto.nombre}"? No se puede deshacer.`)) return;
+  if (!estado.proyecto || !confirm(`¿Borrar el proyecto "${estado.proyecto.nombre}" con todas sus opciones? No se puede deshacer.`)) return;
   await api("DELETE", `/api/proyectos/${estado.proyecto.id}`);
   const lista = await listarProyectos();
   if (lista.length) await abrir(lista[0].id); else await nuevo();
@@ -439,33 +483,71 @@ $("#btn-borrar").onclick = async () => {
 
 let tVista;
 mapa.on("moveend", () => {
-  if (!estado.proyecto) return;
+  if (!estado.proyecto || estado.soloLectura) return;
   clearTimeout(tVista);
   tVista = setTimeout(() => {
     const c = mapa.getCenter();
-    estado.proyecto.vista = { centro: [c.lat, c.lng], zoom: mapa.getZoom() };
-    api("PUT", `/api/proyectos/${estado.proyecto.id}`, estado.proyecto).catch(console.error);
+    guardarProyecto({ vista: { centro: [c.lat, c.lng], zoom: mapa.getZoom() } }).catch(console.error);
   }, 800);
 });
 
 $("#chk-coberturas").onchange = dibujar;
 $("#chk-huecos").onchange = dibujarHuecos;
 
+// --------------------------------------------------------------------------- escenarios (opciones y etapas)
+
+function listaEscenarios() {
+  const p = estado.proyecto;
+  $("#lista-escenarios").innerHTML = `<table><tr><th>Nombre</th><th>Tipo</th><th></th></tr>${p.escenarios.map((e) => `
+    <tr><td><input data-renombrar="${esc(e.id)}" value="${esc(e.nombre)}"></td>
+    <td><select data-tipo="${esc(e.id)}"><option value="alternativa" ${e.tipo === "alternativa" ? "selected" : ""}>Opción</option>
+      <option value="etapa" ${e.tipo === "etapa" ? "selected" : ""}>Etapa de obra</option></select></td>
+    <td>${e.id === estado.escenario.id ? '<span class="etiqueta">abierta</span>' : `<button data-abrir="${esc(e.id)}">Abrir</button>`}
+      <button class="peligro" data-borrar-esc="${esc(e.id)}">Borrar</button></td></tr>`).join("")}</table>`;
+  const cont = $("#lista-escenarios");
+  const refrescar = async () => { estado.proyecto = await api("GET", `/api/proyectos/${p.id}`); selectorEscenarios(); listaEscenarios(); };
+  cont.querySelectorAll("[data-renombrar]").forEach((i) => i.onchange = async () => { await api("PUT", `/api/escenarios/${i.dataset.renombrar}`, { nombre: i.value }); await refrescar(); });
+  cont.querySelectorAll("[data-tipo]").forEach((i) => i.onchange = async () => { await api("PUT", `/api/escenarios/${i.dataset.tipo}`, { tipo: i.value }); await refrescar(); });
+  cont.querySelectorAll("[data-abrir]").forEach((b) => b.onclick = async () => { $("#dlg-escenarios").close(); await abrirEscenario(b.dataset.abrir); });
+  cont.querySelectorAll("[data-borrar-esc]").forEach((b) => b.onclick = async () => {
+    if (!confirm("¿Borrar esta opción con todos sus equipos? No se puede deshacer.")) return;
+    try { await api("DELETE", `/api/escenarios/${b.dataset.borrarEsc}`); } catch (e) { alert(e.message); return; }
+    const abierta = b.dataset.borrarEsc === estado.escenario.id;
+    await refrescar();
+    if (abierta) await abrirEscenario(estado.proyecto.escenarios[0].id);
+  });
+}
+
+$("#btn-escenarios").onclick = () => { listaEscenarios(); $("#dlg-escenarios").showModal(); };
+$("#frm-escenario").onsubmit = async (ev) => {
+  ev.preventDefault();
+  const f = ev.target;
+  clearTimeout(estado.guardando);
+  await guardar();
+  const e = await api("POST", `/api/proyectos/${estado.proyecto.id}/escenarios`, {
+    nombre: f.nombre.value, tipo: f.tipo.value, copiar_de: f.copiar.value === "actual" ? estado.escenario.id : null,
+  });
+  f.reset();
+  estado.proyecto = await api("GET", `/api/proyectos/${estado.proyecto.id}`);
+  $("#dlg-escenarios").close();
+  await abrirEscenario(e.id);
+};
+
 // --------------------------------------------------------------------------- parámetros y distribución
 
 function formularioParametros() {
   $("#parametros").innerHTML = Object.entries(ETIQUETAS_PARAM).map(([k, t]) =>
-    `<label>${esc(t)} <input type="number" step="any" data-param="${k}" value="${esc(param(k))}"></label>`).join("");
+    `<label>${esc(t)} <input type="number" step="any" data-param="${k}" value="${esc(param(k))}" ${estado.soloLectura ? "disabled" : ""}></label>`).join("");
   $("#parametros").querySelectorAll("[data-param]").forEach((inp) => inp.addEventListener("change", () => {
-    estado.proyecto.parametros ||= {};
-    if (inp.value === "") delete estado.proyecto.parametros[inp.dataset.param];
-    else estado.proyecto.parametros[inp.dataset.param] = Number(inp.value);
+    const par = estado.escenario.parametros;
+    if (inp.value === "") delete par[inp.dataset.param];
+    else par[inp.dataset.param] = Number(inp.value);
     dibujar();
     cambio();
   }));
   $("#dist-modelo").innerHTML = opcionesModelos("camara", param("modelo_camara_perimetro"));
   $("#dist-cpg").value = param("camaras_por_gabinete");
-  $("#dist-esp").value = estado.proyecto.parametros?.espaciado_m ?? "";
+  $("#dist-esp").value = estado.escenario.parametros.espaciado_m ?? "";
   $("#dist-sentido").value = param("sentido");
   actualizarEspaciadoSugerido();
 }
@@ -479,16 +561,16 @@ $("#dist-modelo").onchange = actualizarEspaciadoSugerido;
 $("#btn-distribuir").onclick = async () => {
   if (!porTipo("perimetro").length) { alert("Primero dibujá el perímetro."); return; }
   clearTimeout(estado.guardando);
-  await api("PUT", `/api/proyectos/${estado.proyecto.id}`, estado.proyecto);
+  await guardar();
   const esp = $("#dist-esp").value;
   try {
-    estado.proyecto = await api("POST", `/api/proyectos/${estado.proyecto.id}/distribuir`, {
+    estado.escenario = await api("POST", `/api/escenarios/${estado.escenario.id}/distribuir`, {
       modelo_camara_perimetro: $("#dist-modelo").value,
       espaciado_m: esp === "" ? null : Number(esp),
       camaras_por_gabinete: Number($("#dist-cpg").value) || 4,
       sentido: $("#dist-sentido").value,
     });
-    if (esp === "") delete estado.proyecto.parametros.espaciado_m;
+    if (esp === "") delete estado.escenario.parametros.espaciado_m;
   } catch (e) { alert(e.message); return; }
   estado.seleccion = null;
   inspector();
@@ -579,21 +661,185 @@ async function cargarCatalogo() {
   estado.catalogo = Object.fromEntries((await api("GET", "/api/catalogo")).map((m) => [m.id, m]));
 }
 
+
+// --------------------------------------------------------------------------- acceso y usuarios
+
+function descargar(nombre, texto) {
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob([texto], { type: "text/plain" }));
+  a.download = nombre;
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+}
+
+// botones "Mostrar" junto a cada contraseña
+document.addEventListener("click", (e) => {
+  const b = e.target.closest("button.ver");
+  if (!b) return;
+  const inp = b.parentElement.querySelector("input");
+  const ver = inp.type === "password";
+  inp.type = ver ? "text" : "password";
+  b.textContent = ver ? "Ocultar" : "Mostrar";
+});
+document.querySelectorAll("dialog [data-cerrar]").forEach((b) => b.onclick = () => b.closest("dialog").close());
+
+function mostrarAcceso(modo, mensaje = "") {
+  $("#pantalla-acceso").hidden = !modo;
+  for (const [id, m] of [["#frm-inicial", "inicial"], ["#frm-ingreso", "ingreso"], ["#frm-recuperar", "recuperar"]]) $(id).hidden = m !== modo;
+  $("#msg-acceso").textContent = mensaje;
+}
+
+$("#frm-inicial").onsubmit = async (e) => {
+  e.preventDefault();
+  const f = e.target;
+  if (f.clave.value !== f.clave2.value) { $("#msg-acceso").textContent = "Las contraseñas no coinciden."; return; }
+  try {
+    const r = await api("POST", "/api/configuracion-inicial", { clave: f.clave.value });
+    descargar(r.archivo, r.llave);
+    alert("Se descargó la llave de recuperación (aytroot-llave-recuperacion.key). Guardala fuera de esta PC: es la única forma de recuperar aytroot si perdés la contraseña.");
+    await api("POST", "/api/ingresar", { usuario: "aytroot", clave: f.clave.value });
+    f.reset();
+    await inicio();
+  } catch (err) { $("#msg-acceso").textContent = err.message; }
+};
+
+$("#frm-ingreso").onsubmit = async (e) => {
+  e.preventDefault();
+  const f = e.target;
+  try {
+    await api("POST", "/api/ingresar", { usuario: f.usuario.value, clave: f.clave.value });
+    f.clave.value = "";
+    await inicio();
+  } catch (err) { $("#msg-acceso").textContent = err.message; }
+};
+
+$("#lnk-recuperar").onclick = (e) => { e.preventDefault(); mostrarAcceso("recuperar"); };
+$("#lnk-volver").onclick = (e) => { e.preventDefault(); mostrarAcceso("ingreso"); };
+$("#frm-recuperar").onsubmit = async (e) => {
+  e.preventDefault();
+  const f = e.target;
+  if (f.clave.value !== f.clave2.value) { $("#msg-acceso").textContent = "Las contraseñas no coinciden."; return; }
+  try {
+    const llave = await f.llave.files[0].text();
+    const r = await api("POST", "/api/recuperar", { llave, clave: f.clave.value });
+    descargar(r.archivo, r.llave);
+    f.reset();
+    mostrarAcceso("ingreso", "Listo. Ingresá con la contraseña nueva. Se descargó una llave nueva: la anterior ya no vale.");
+  } catch (err) { $("#msg-acceso").textContent = err.message; }
+};
+
+$("#btn-usuario").onclick = (e) => { e.stopPropagation(); $("#menu-usuario").hidden = !$("#menu-usuario").hidden; };
+document.addEventListener("click", () => { $("#menu-usuario").hidden = true; });
+$("#btn-salir").onclick = async () => { await api("POST", "/api/salir"); location.reload(); };
+
+$("#btn-mi-clave").onclick = () => { $("#frm-clave").reset(); $("#dlg-clave").showModal(); };
+$("#frm-clave").onsubmit = async (e) => {
+  e.preventDefault();
+  const f = e.target;
+  if (f.nueva.value !== f.nueva2.value) { alert("Las contraseñas nuevas no coinciden."); return; }
+  try {
+    await api("POST", "/api/mi-clave", { actual: f.actual.value, nueva: f.nueva.value });
+    $("#dlg-clave").close();
+    alert("Contraseña actualizada.");
+  } catch (err) { alert(err.message); }
+};
+
+async function tablaUsuarios() {
+  const lista = await api("GET", "/api/usuarios");
+  $("#tabla-usuarios").innerHTML = `<table><tr><th>Usuario</th><th>Nombre</th><th>Rol</th><th>Estado</th><th></th></tr>${lista.map((u) => `
+    <tr><td>${esc(u.usuario)}</td><td>${esc(u.nombre || "")}</td><td>${esc(u.rol_nombre)}</td><td>${u.activo ? "Activo" : "Inactivo"}</td>
+    <td>${u.fijo ? '<span class="etiqueta">fijo</span>' : `<button data-editar-u="${esc(u.id)}">Editar</button>
+      <button data-activo-u="${esc(u.id)}">${u.activo ? "Desactivar" : "Activar"}</button>
+      <button class="peligro" data-borrar-u="${esc(u.id)}">Borrar</button>`}</td></tr>`).join("")}</table>`;
+  const cont = $("#tabla-usuarios");
+  cont.querySelectorAll("[data-editar-u]").forEach((b) => b.onclick = () => cargarUsuario(lista.find((u) => u.id === b.dataset.editarU)));
+  cont.querySelectorAll("[data-activo-u]").forEach((b) => b.onclick = async () => {
+    const u = lista.find((x) => x.id === b.dataset.activoU);
+    await api("PUT", `/api/usuarios/${u.id}`, { activo: !u.activo });
+    tablaUsuarios();
+  });
+  cont.querySelectorAll("[data-borrar-u]").forEach((b) => b.onclick = async () => {
+    if (!confirm("¿Borrar este usuario?")) return;
+    await api("DELETE", `/api/usuarios/${b.dataset.borrarU}`);
+    tablaUsuarios();
+  });
+}
+
+async function formularioUsuario(u) {
+  const f = $("#frm-usuario");
+  f.reset();
+  f.rol.innerHTML = Object.entries(estado.roles).filter(([k]) => k !== "superadmin")
+    .map(([k, v]) => `<option value="${k}">${esc(v)}</option>`).join("");
+  const proyectos = await api("GET", "/api/proyectos");
+  $("#usuario-proyectos").innerHTML = proyectos.map((p) =>
+    `<label class="check"><input type="checkbox" value="${esc(p.id)}" ${u?.proyectos?.includes(p.id) ? "checked" : ""}> ${esc(p.nombre)}</label>`).join("") || '<p class="ayuda">No hay proyectos.</p>';
+  f.id.value = u?.id || "";
+  f.usuario.value = u?.usuario || "";
+  f.usuario.disabled = !!u;
+  f.nombre.value = u?.nombre || "";
+  f.rol.value = u?.rol || "ingeniero";
+  f.clave.required = !u;
+  $("#frm-usuario-titulo").textContent = u ? `Editar ${u.usuario}` : "Nuevo usuario";
+  rolCambiado();
+}
+const cargarUsuario = (u) => formularioUsuario(u);
+function rolCambiado() { $('#frm-usuario fieldset[data-rol="visor"]').hidden = $("#frm-usuario").rol.value !== "visor"; }
+$("#frm-usuario").rol.onchange = rolCambiado;
+$("#btn-usuario-limpiar").onclick = () => formularioUsuario(null);
+$("#frm-usuario").onsubmit = async (e) => {
+  e.preventDefault();
+  const f = e.target;
+  const datos = { nombre: f.nombre.value, rol: f.rol.value,
+    proyectos: [...$("#usuario-proyectos").querySelectorAll("input:checked")].map((i) => i.value) };
+  if (f.clave.value) datos.clave = f.clave.value;
+  try {
+    if (f.id.value) await api("PUT", `/api/usuarios/${f.id.value}`, datos);
+    else await api("POST", "/api/usuarios", { ...datos, usuario: f.usuario.value });
+  } catch (err) { alert(err.message); return; }
+  await formularioUsuario(null);
+  tablaUsuarios();
+};
+$("#btn-usuarios").onclick = async () => { await formularioUsuario(null); await tablaUsuarios(); $("#dlg-usuarios").showModal(); };
+$("#btn-nueva-llave").onclick = async () => {
+  if (!confirm("Se genera una llave nueva y la anterior deja de valer. ¿Continuar?")) return;
+  const r = await api("POST", "/api/llave-recuperacion");
+  descargar(r.archivo, r.llave);
+};
+
 // --------------------------------------------------------------------------- inicio
 
-(async function inicio() {
+async function inicio() {
+  const est = await api("GET", "/api/estado");
+  estado.roles = est.roles;
+  if (!est.configurado) {
+    if (est.local) mostrarAcceso("inicial");
+    else mostrarAcceso("ingreso", "El sistema todavía no está configurado. Abrilo desde la PC del servidor (http://localhost:8000).");
+    return;
+  }
+  if (!est.usuario) { mostrarAcceso("ingreso"); return; }
+  mostrarAcceso(null);
+  const u = est.usuario;
+  estado.usuario = u;
+  estado.soloLectura = !["superadmin", "ingeniero", "relevador"].includes(u.rol);
+  document.body.classList.toggle("solo-lectura", estado.soloLectura);
+  document.body.classList.toggle("es-admin", u.rol === "superadmin");
+  for (const id of ["#inp-nombre", "#inp-cliente", "#sel-categoria"]) $(id).disabled = estado.soloLectura;
+  $("#btn-usuario").textContent = u.nombre && u.nombre !== u.rol_nombre ? `${u.nombre} · ${u.rol_nombre}` : `${u.usuario} · ${u.rol_nombre}`;
   estado.defaults = await api("GET", "/api/parametros");
   await cargarCatalogo();
   const lista = await listarProyectos();
-  let ultimo = null;
-  try { ultimo = localStorage.getItem("ayt-ultimo"); } catch (_) { /* sin almacenamiento */ }
   if (!lista.length) {
+    if (estado.soloLectura) { $("#resultados").innerHTML = '<p class="ayuda">No tenés proyectos asignados.</p>'; return; }
     const c = mapa.getCenter();
-    const p = await api("POST", "/api/proyectos", { nombre: "Proyecto nuevo", elementos: [], parametros: {}, vista: { centro: [c.lat, c.lng], zoom: mapa.getZoom() } });
+    const p = await api("POST", "/api/proyectos", { nombre: "Proyecto nuevo", vista: { centro: [c.lat, c.lng], zoom: mapa.getZoom() } });
     await listarProyectos(p.id);
     return abrir(p.id);
   }
+  const ultimo = recuerdo("ayt-ultimo");
   const id = lista.some((p) => p.id === ultimo) ? ultimo : lista[0].id;
   $("#sel-proyecto").value = id;
   await abrir(id);
-})();
+}
+
+inicio();

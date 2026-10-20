@@ -33,7 +33,7 @@ PARAMETROS_DEFAULT = {
     "factor_potencia": 0.9,
     "eficiencia_fuentes": 0.85,
     "consumo_gabinete_extra_w": 10.0,  # ventilación, ONU no listada, etc.
-    "limite_caida_pct": 5.0,
+    "limite_caida_pct": 3.0,  # AEA: 3 % iluminación / 5 % fuerza motriz; se toma el conservador
     "margen_ups": 1.3,
     "dias_grabacion": 30,
     "tolerancia_perimetro_m": 30.0,  # a menos de esto un elemento se considera "sobre el cerco"
@@ -44,6 +44,18 @@ def _params(proyecto: dict) -> dict:
     p = dict(PARAMETROS_DEFAULT)
     p.update({k: v for k, v in (proyecto.get("parametros") or {}).items() if v is not None})
     return p
+
+
+PLANTA_MAPA = "exterior"
+
+
+def _en_mapa(f: dict) -> bool:
+    return f.get("properties", {}).get("planta", PLANTA_MAPA) == PLANTA_MAPA
+
+
+def _solo_mapa(proyecto: dict) -> dict:
+    """Los cálculos sobre el mapa usan solo la planta exterior; las demás plantas tienen su propio plano."""
+    return {**proyecto, "elementos": [f for f in proyecto.get("elementos", []) if _en_mapa(f)]}
 
 
 def _por_tipo(proyecto: dict, tipo: str) -> list[dict]:
@@ -92,7 +104,7 @@ def _punto(proj: Proyeccion, xy, tipo: str, **props) -> dict:
         "type": "Feature",
         "id": f"{tipo[:3]}-{uuid.uuid4().hex[:8]}",
         "geometry": {"type": "Point", "coordinates": [round(lon, 7), round(lat, 7)]},
-        "properties": {"tipo": tipo, **props},
+        "properties": {"tipo": tipo, "planta": PLANTA_MAPA, **props},
     }
 
 
@@ -107,6 +119,8 @@ def distribuir_perimetro(proyecto: dict, catalogo: dict[str, dict], opciones: di
     """
     p = _params(proyecto)
     p.update({k: v for k, v in (opciones or {}).items() if v is not None})
+    otras_plantas = [f for f in proyecto.get("elementos", []) if not _en_mapa(f)]
+    proyecto = _solo_mapa(proyecto)
     proj, rec, _ = _preparar(proyecto)
     if rec is None:
         raise ValueError("Primero dibujá el perímetro.")
@@ -118,7 +132,7 @@ def distribuir_perimetro(proyecto: dict, catalogo: dict[str, dict], opciones: di
         raise ValueError("El espaciado debe ser mayor a cero.")
     inverso = p["sentido"] == "inverso"
 
-    conservar = [f for f in proyecto.get("elementos", []) if not f["properties"].get("auto")]
+    conservar = otras_plantas + [f for f in proyecto.get("elementos", []) if not f["properties"].get("auto")]
     camaras, progresivas = [], []
     # Cada lado del cerco (entre quiebres marcados) arranca con una cámara en su esquina mirando
     # a lo largo del lado; así ninguna esquina queda ciega.
@@ -160,6 +174,7 @@ def distribuir_perimetro(proyecto: dict, catalogo: dict[str, dict], opciones: di
 
 
 def calcular(proyecto: dict, catalogo: dict[str, dict]) -> dict:
+    proyecto = _solo_mapa(proyecto)
     p = _params(proyecto)
     proj, rec, recorridos = _preparar(proyecto)
     adv: list[str] = []
@@ -364,7 +379,10 @@ def calcular(proyecto: dict, catalogo: dict[str, dict]) -> dict:
 
     def item(cat, desc, cant, unidad="u", modelo=""):
         if cant:
-            lista.append({"categoria": cat, "descripcion": desc, "modelo": modelo, "cantidad": cant, "unidad": unidad})
+            # clave estable: permite guardar ediciones manuales del cómputo que sobreviven al recálculo
+            clave = "|".join((cat, desc.split(" (")[0], modelo)).lower()
+            lista.append({"clave": clave, "categoria": cat, "descripcion": desc, "modelo": modelo,
+                          "cantidad": cant, "unidad": unidad})
 
     for mid, cant in Counter(c["properties"].get("modelo") for c in camaras).most_common():
         m = catalogo.get(mid, {})

@@ -3,7 +3,7 @@
 Aplicación para diseñar proyectos de seguridad electrónica integral (CCTV, control de accesos,
 LPR, FaceID, térmicas, PTZ, redes de fibra y energía, gabinetes, obra civil y centrales de monitoreo).
 
-Estado actual: **prototipo de la etapa 1, diseño perimetral sobre mapa satelital**. Ver
+Estado actual: **v0.2, cimientos (usuarios, roles, escenarios) sobre el prototipo de diseño perimetral**. Ver
 [docs/ESTADO.md](docs/ESTADO.md) para qué funciona hoy y cuáles son los próximos pasos, y
 [docs/ROADMAP.md](docs/ROADMAP.md) para el plan completo.
 
@@ -16,6 +16,14 @@ Requiere Python 3.11 o superior y conexión a internet para ver el mapa satelita
 
 Los proyectos se guardan en `datos/ayt.db` (SQLite). Para usar otra ubicación, definir la variable
 de entorno `AYT_DB`.
+
+## Primer uso
+
+La primera vez, abrir http://localhost:8000 **en la PC del servidor**: pide definir la contraseña del
+superadministrador `aytroot` y descarga la llave de recuperación (`aytroot-llave-recuperacion.key`).
+Guardá ese archivo fuera de la PC: es la única forma de recuperar aytroot si se pierde la contraseña.
+Recuperación: "¿Perdiste la contraseña?" en la pantalla de ingreso, o desde la carpeta backend
+`python -m app.recuperar ruta/al/archivo.key`. Ambas solo funcionan en la PC del servidor.
 
 ## Uso rápido
 
@@ -33,11 +41,13 @@ de entorno `AYT_DB`.
 
 ```
 backend/app/main.py            API REST (FastAPI) y servidor de la interfaz
-backend/app/db.py              Persistencia SQLite (proyectos y catálogo)
+backend/app/db.py              Persistencia SQLite (proyectos, escenarios, catálogo, auditoría)
+backend/app/auth.py            Usuarios, roles, sesiones y llave de recuperación
+backend/app/recuperar.py       Recuperación de aytroot por consola con la llave
 backend/app/catalogo_base.json Catálogo inicial, cargado desde los datasheets de las obras de referencia
 backend/app/engine/geo.py      Geometría (proyección local, recorridos, sectores de visión)
 backend/app/engine/calculo.py  Distribución automática y cálculos (cobertura, red, energía, listado)
-backend/tests/                 Pruebas del motor (pytest)
+backend/tests/                 Pruebas del motor y de la API (pytest)
 frontend/                      Interfaz web (Leaflet + Geoman, sin compilación)
 ```
 

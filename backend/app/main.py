@@ -8,115 +8,304 @@ import csv
 import io
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException
-from fastapi.responses import FileResponse, StreamingResponse
+from fastapi import Depends, FastAPI, HTTPException, Request, Response
+from fastapi.responses import FileResponse, PlainTextResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
-from . import db
+from . import auth, db
 from .engine.calculo import PARAMETROS_DEFAULT, calcular, distribuir_perimetro
 
 FRONTEND = Path(__file__).resolve().parents[2] / "frontend"
+COOKIE = "ayt_sesion"
+LOCALES = {"127.0.0.1", "::1", "localhost", "testclient"}
 
-app = FastAPI(title="AyT Proyectos", version="0.1.0")
+app = FastAPI(title="AyT Proyectos", version="0.2.0")
 db.inicializar()
 
 
-def _proyecto(pid: str) -> dict:
+# --------------------------------------------------------------------------- dependencias
+
+
+def usuario_actual(request: Request) -> dict:
+    u = auth.usuario_de_sesion(request.cookies.get(COOKIE))
+    if not u:
+        raise HTTPException(401, "Sesión no iniciada")
+    return u
+
+
+def editor(u: dict = Depends(usuario_actual)) -> dict:
+    if not auth.puede_editar(u):
+        raise HTTPException(403, "Tu usuario es de solo lectura")
+    return u
+
+
+def superadmin(u: dict = Depends(usuario_actual)) -> dict:
+    if u["rol"] != "superadmin":
+        raise HTTPException(403, "Solo el superadministrador puede hacer esto")
+    return u
+
+
+def solo_local(request: Request) -> None:
+    """La configuración inicial y la recuperación solo se aceptan desde la PC del servidor."""
+    if (request.client.host if request.client else "") not in LOCALES:
+        raise HTTPException(403, "Esta operación solo se puede hacer desde la PC donde corre el servidor")
+
+
+def _proyecto(pid: str, u: dict) -> dict:
     p = db.obtener_proyecto(pid)
-    if not p:
+    if not p or not auth.puede_ver_proyecto(u, pid):
         raise HTTPException(404, "Proyecto no encontrado")
     return p
 
 
+def _escenario(eid: str, u: dict) -> dict:
+    e = db.obtener_escenario(eid)
+    if not e or not auth.puede_ver_proyecto(u, e["proyecto_id"]):
+        raise HTTPException(404, "Escenario no encontrado")
+    return e
+
+
+def _error(e: auth.ErrorAuth):
+    raise HTTPException(400, str(e))
+
+
+# --------------------------------------------------------------------------- sesión y configuración
+
+
+@app.get("/api/estado")
+def estado(request: Request):
+    u = auth.usuario_de_sesion(request.cookies.get(COOKIE))
+    return {"configurado": auth.configurado(), "usuario": u, "roles": auth.ROLES,
+            "local": (request.client.host if request.client else "") in LOCALES}
+
+
+@app.post("/api/configuracion-inicial", dependencies=[Depends(solo_local)])
+def configuracion_inicial(datos: dict):
+    try:
+        llave = auth.configuracion_inicial(datos.get("clave", ""))
+    except auth.ErrorAuth as e:
+        _error(e)
+    return {"llave": llave, "archivo": "aytroot-llave-recuperacion.key"}
+
+
+@app.post("/api/recuperar", dependencies=[Depends(solo_local)])
+def recuperar(datos: dict):
+    try:
+        llave = auth.recuperar(datos.get("llave", ""), datos.get("clave", ""))
+    except auth.ErrorAuth as e:
+        _error(e)
+    return {"llave": llave, "archivo": "aytroot-llave-recuperacion.key"}
+
+
+@app.post("/api/ingresar")
+def ingresar(datos: dict, response: Response):
+    try:
+        token, u = auth.iniciar_sesion(datos.get("usuario", ""), datos.get("clave", ""))
+    except auth.ErrorAuth as e:
+        raise HTTPException(401, str(e))
+    response.set_cookie(COOKIE, token, httponly=True, samesite="lax", max_age=auth.DURACION_SESION)
+    return u
+
+
+@app.post("/api/salir")
+def salir(request: Request, response: Response):
+    auth.cerrar_sesion(request.cookies.get(COOKIE))
+    response.delete_cookie(COOKIE)
+    return {"ok": True}
+
+
+@app.post("/api/mi-clave")
+def mi_clave(datos: dict, u: dict = Depends(usuario_actual)):
+    try:
+        auth.iniciar_sesion(u["usuario"], datos.get("actual", ""))  # verifica la actual
+    except auth.ErrorAuth:
+        raise HTTPException(400, "La contraseña actual no es correcta")
+    try:
+        auth.modificar_usuario(u["id"], {"clave": datos.get("nueva", "")}, u)
+    except auth.ErrorAuth as e:
+        _error(e)
+    return {"ok": True}
+
+
+# --------------------------------------------------------------------------- usuarios (superadmin)
+
+
+@app.get("/api/usuarios")
+def get_usuarios(_: dict = Depends(superadmin)):
+    return auth.listar_usuarios()
+
+
+@app.post("/api/usuarios")
+def post_usuario(datos: dict, u: dict = Depends(superadmin)):
+    try:
+        nuevo = auth.crear_usuario(datos.get("usuario", ""), datos.get("nombre", ""), datos.get("rol", ""),
+                                   datos.get("clave", ""), datos.get("proyectos"))
+    except auth.ErrorAuth as e:
+        _error(e)
+    db.auditar(u["usuario"], "crear_usuario", nuevo["usuario"])
+    return nuevo
+
+
+@app.put("/api/usuarios/{uid}")
+def put_usuario(uid: str, datos: dict, u: dict = Depends(superadmin)):
+    try:
+        return auth.modificar_usuario(uid, datos, u)
+    except auth.ErrorAuth as e:
+        _error(e)
+
+
+@app.delete("/api/usuarios/{uid}")
+def delete_usuario(uid: str, u: dict = Depends(superadmin)):
+    try:
+        auth.borrar_usuario(uid, u)
+    except auth.ErrorAuth as e:
+        _error(e)
+    return {"ok": True}
+
+
+@app.post("/api/llave-recuperacion")
+def nueva_llave(u: dict = Depends(superadmin)):
+    db.auditar(u["usuario"], "nueva_llave_recuperacion")
+    return {"llave": auth.generar_llave(), "archivo": "aytroot-llave-recuperacion.key"}
+
+
+@app.get("/api/auditoria")
+def get_auditoria(_: dict = Depends(superadmin)):
+    return db.auditoria()
+
+
+# --------------------------------------------------------------------------- catálogo
+
+
 @app.get("/api/parametros")
-def parametros():
+def parametros(_: dict = Depends(usuario_actual)):
     return PARAMETROS_DEFAULT
 
 
 @app.get("/api/catalogo")
-def get_catalogo():
+def get_catalogo(_: dict = Depends(usuario_actual)):
     return list(db.catalogo().values())
 
 
 @app.post("/api/catalogo")
-def post_modelo(m: dict):
+def post_modelo(m: dict, _: dict = Depends(editor)):
     if not m.get("categoria") or not m.get("modelo"):
         raise HTTPException(422, "Faltan categoría o modelo")
     return db.guardar_modelo(m)
 
 
 @app.delete("/api/catalogo/{mid}")
-def delete_modelo(mid: str):
+def delete_modelo(mid: str, _: dict = Depends(editor)):
     if not db.borrar_modelo(mid):
         raise HTTPException(400, "Solo se pueden borrar modelos cargados por el usuario")
     return {"ok": True}
 
 
+# --------------------------------------------------------------------------- proyectos
+
+
 @app.get("/api/proyectos")
-def get_proyectos():
-    return db.listar_proyectos()
+def get_proyectos(u: dict = Depends(usuario_actual)):
+    return db.listar_proyectos(u["proyectos"] if u["rol"] == "visor" else None)
 
 
 @app.post("/api/proyectos")
-def post_proyecto(datos: dict):
-    datos.pop("id", None)
-    return db.guardar_proyecto(datos)
+def post_proyecto(datos: dict, u: dict = Depends(editor)):
+    p = db.crear_proyecto(datos)
+    db.auditar(u["usuario"], "crear_proyecto", p["nombre"])
+    return p
 
 
 @app.get("/api/proyectos/{pid}")
-def get_proyecto(pid: str):
-    return _proyecto(pid)
+def get_proyecto(pid: str, u: dict = Depends(usuario_actual)):
+    return _proyecto(pid, u)
 
 
 @app.put("/api/proyectos/{pid}")
-def put_proyecto(pid: str, datos: dict):
-    _proyecto(pid)
-    datos["id"] = pid
-    return db.guardar_proyecto(datos)
+def put_proyecto(pid: str, datos: dict, u: dict = Depends(editor)):
+    _proyecto(pid, u)
+    return db.actualizar_proyecto(pid, datos)
 
 
 @app.delete("/api/proyectos/{pid}")
-def delete_proyecto(pid: str):
-    if not db.borrar_proyecto(pid):
-        raise HTTPException(404, "Proyecto no encontrado")
+def delete_proyecto(pid: str, u: dict = Depends(editor)):
+    p = _proyecto(pid, u)
+    db.borrar_proyecto(pid)
+    db.auditar(u["usuario"], "borrar_proyecto", p["nombre"])
     return {"ok": True}
 
 
-@app.post("/api/proyectos/{pid}/distribuir")
-def post_distribuir(pid: str, opciones: dict | None = None):
-    p = _proyecto(pid)
+@app.post("/api/proyectos/{pid}/escenarios")
+def post_escenario(pid: str, datos: dict, u: dict = Depends(editor)):
+    _proyecto(pid, u)
+    e = db.crear_escenario(pid, datos.get("nombre") or "Nueva opción", datos.get("tipo") or "alternativa",
+                           datos.get("copiar_de"))
+    if not e:
+        raise HTTPException(400, "No se pudo crear el escenario")
+    return e
+
+
+# --------------------------------------------------------------------------- escenarios
+
+
+@app.get("/api/escenarios/{eid}")
+def get_escenario(eid: str, u: dict = Depends(usuario_actual)):
+    return _escenario(eid, u)
+
+
+@app.put("/api/escenarios/{eid}")
+def put_escenario(eid: str, datos: dict, u: dict = Depends(editor)):
+    _escenario(eid, u)
+    return db.guardar_escenario(eid, datos)
+
+
+@app.delete("/api/escenarios/{eid}")
+def delete_escenario(eid: str, u: dict = Depends(editor)):
+    _escenario(eid, u)
+    r = db.borrar_escenario(eid)
+    if r == "ultimo":
+        raise HTTPException(400, "Un proyecto necesita al menos un escenario")
+    return {"ok": True}
+
+
+@app.post("/api/escenarios/{eid}/distribuir")
+def post_distribuir(eid: str, opciones: dict | None = None, u: dict = Depends(editor)):
+    e = _escenario(eid, u)
     try:
-        p["elementos"] = distribuir_perimetro(p, db.catalogo(), opciones or {})
-    except ValueError as e:
-        raise HTTPException(422, str(e))
+        e["elementos"] = distribuir_perimetro(e, db.catalogo(), opciones or {})
+    except ValueError as err:
+        raise HTTPException(422, str(err))
     if opciones:
-        p["parametros"] = {**p.get("parametros", {}), **{k: v for k, v in opciones.items() if v is not None}}
-    return db.guardar_proyecto(p)
+        e["parametros"] = {**e.get("parametros", {}), **{k: v for k, v in opciones.items() if v is not None}}
+    return db.guardar_escenario(eid, e)
 
 
-@app.get("/api/proyectos/{pid}/calculo")
-def get_calculo(pid: str):
+@app.get("/api/escenarios/{eid}/calculo")
+def get_calculo(eid: str, u: dict = Depends(usuario_actual)):
     try:
-        return calcular(_proyecto(pid), db.catalogo())
-    except ValueError as e:
-        raise HTTPException(422, str(e))
+        return calcular(_escenario(eid, u), db.catalogo())
+    except ValueError as err:
+        raise HTTPException(422, str(err))
 
 
-@app.get("/api/proyectos/{pid}/materiales.csv")
-def get_materiales_csv(pid: str):
-    p = _proyecto(pid)
-    res = calcular(p, db.catalogo())
+@app.get("/api/escenarios/{eid}/materiales.csv")
+def get_materiales_csv(eid: str, u: dict = Depends(usuario_actual)):
+    e = _escenario(eid, u)
+    p = _proyecto(e["proyecto_id"], u)
+    res = calcular(e, db.catalogo())
     buf = io.StringIO()
     w = csv.writer(buf, delimiter=";")
     w.writerow(["Categoría", "Descripción", "Modelo", "Cantidad", "Unidad"])
     for m in res["materiales"]:
         w.writerow([m["categoria"], m["descripcion"], m["modelo"], m["cantidad"], m["unidad"]])
-    nombre = "".join(ch if ch.isalnum() or ch in " -_" else "_" for ch in p["nombre"]).strip() or "proyecto"
+    nombre = "".join(ch if ch.isalnum() or ch in " -_" else "_" for ch in f"{p['nombre']} - {e['nombre']}").strip()
     return StreamingResponse(
         iter(["﻿" + buf.getvalue()]), media_type="text/csv; charset=utf-8",
-        headers={"Content-Disposition": f'attachment; filename="Materiales - {nombre}.csv"'},
+        headers={"Content-Disposition": f'attachment; filename="Materiales - {nombre or "proyecto"}.csv"'},
     )
 
+
+# --------------------------------------------------------------------------- interfaz
 
 app.mount("/static", StaticFiles(directory=FRONTEND), name="static")
 
@@ -124,3 +313,8 @@ app.mount("/static", StaticFiles(directory=FRONTEND), name="static")
 @app.get("/")
 def index():
     return FileResponse(FRONTEND / "index.html")
+
+
+@app.get("/salud", response_class=PlainTextResponse)
+def salud():
+    return "ok"
