@@ -187,10 +187,17 @@ def get_catalogo(_: dict = Depends(usuario_actual)):
     return list(db.catalogo().values())
 
 
+@app.get("/api/catalogo/esquema")
+def get_esquema(_: dict = Depends(usuario_actual)):
+    return db.esquema_catalogo()
+
+
 @app.post("/api/catalogo")
 def post_modelo(m: dict, _: dict = Depends(editor)):
     if not m.get("categoria") or not m.get("modelo"):
         raise HTTPException(422, "Faltan categoría o modelo")
+    if m["categoria"] not in {c["id"] for c in db.esquema_catalogo()["categorias"]}:
+        raise HTTPException(422, "Categoría desconocida")
     return db.guardar_modelo(m)
 
 

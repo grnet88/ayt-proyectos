@@ -594,16 +594,44 @@ $("#frm-buscar").onsubmit = async (e) => {
 
 // --------------------------------------------------------------------------- catálogo
 
-const CAMPOS_NUM = ["lente_mm", "hfov", "vfov", "ir_m", "alcance_analitica_m", "bitrate_mbps", "puertos_poe", "budget_w", "potencia_va", "consumo_w"];
+// El formulario y la columna "Datos" se arman con el esquema de categorías que manda el servidor.
+const leer = (m, clave) => clave.split(".").reduce((o, k) => o?.[k], m);
+function escribir(m, clave, valor) {
+  const ks = clave.split("."), ult = ks.pop();
+  ks.reduce((o, k) => (o[k] ||= {}), m)[ult] = valor;
+}
+const categoriaDe = (id) => estado.esquema.categorias.find((c) => c.id === id);
+const camposDe = (cat) => [...estado.esquema.comunes, ...(categoriaDe(cat)?.campos || [])];
+
+function resumenModelo(m) {
+  const campos = categoriaDe(m.categoria)?.campos.filter((c) => c.resumen) || [];
+  const partes = campos.map((c) => {
+    const v = leer(m, c.clave);
+    if (v == null || v === "" || v === 0) return null;
+    if (c.tipo === "opcion") return c.opciones.find(([val]) => val === v)?.[1] ?? v;
+    if (c.tipo === "bool") return v ? c.etiqueta : null;
+    if (c.tipo !== "num") return v;
+    const n = Number(v).toLocaleString("es-AR", { maximumFractionDigits: 2 });
+    if (c.corto) return c.corto.replace("{v}", n);
+    if (c.unidad) return c.unidad === "°" ? `${n}°` : `${n} ${c.unidad}`;
+    return `${n} ${c.etiqueta[0].toLowerCase()}${c.etiqueta.slice(1)}`;
+  }).filter(Boolean);
+  if (m.consumo_w) partes.push(`${fmt(m.consumo_w, 1)} W`);
+  return partes.join(" · ");
+}
 
 function tablaCatalogo() {
-  const filas = Object.values(estado.catalogo).sort((a, b) => a.categoria.localeCompare(b.categoria) || a.modelo.localeCompare(b.modelo));
-  $("#tabla-catalogo").innerHTML = `<table><tr><th>Categoría</th><th>Marca</th><th>Modelo</th><th>Datos</th><th></th></tr>${filas.map((m) => {
-    const datos = m.categoria === "camara" ? `${fmt(m.hfov)}° · analítica ${fmt(m.alcance_analitica_m, 1)} m · ${fmt(m.consumo_w, 1)} W`
-      : m.categoria === "switch" ? `${m.puertos_poe} PoE · ${m.budget_w} W` : m.categoria === "ups" ? `${fmt(m.potencia_va)} VA` : "";
-    return `<tr><td>${esc(m.categoria)}</td><td>${esc(m.marca || "")}</td><td>${esc(m.modelo)}</td><td>${esc(datos)}</td>
+  const filtro = $("#sel-filtro-cat").value, orden = estado.esquema.categorias.map((c) => c.id);
+  const filas = Object.values(estado.catalogo).filter((m) => !filtro || m.categoria === filtro)
+    .sort((a, b) => orden.indexOf(a.categoria) - orden.indexOf(b.categoria) || a.modelo.localeCompare(b.modelo));
+  let cat = null, html = "<table><tr><th>Marca</th><th>Modelo</th><th>Datos</th><th></th></tr>";
+  for (const m of filas) {
+    if (m.categoria !== cat) { cat = m.categoria; html += `<tr><th colspan="4">${esc(categoriaDe(cat)?.nombre || cat)}</th></tr>`; }
+    html += `<tr><td>${esc(m.marca || "")}</td><td>${esc(m.modelo)}${m.generico ? ' <span class="etiqueta" title="Valores típicos, verificar con el datasheet">genérico</span>' : ""}</td>
+      <td>${esc(resumenModelo(m))}</td>
       <td><button data-editar="${esc(m.id)}">${m.base ? "Duplicar" : "Editar"}</button>${m.base ? "" : ` <button class="peligro" data-borrar="${esc(m.id)}">Borrar</button>`}</td></tr>`;
-  }).join("")}</table>`;
+  }
+  $("#tabla-catalogo").innerHTML = html + "</table>";
   $("#tabla-catalogo").querySelectorAll("[data-editar]").forEach((b) => b.onclick = () => cargarModelo(estado.catalogo[b.dataset.editar]));
   $("#tabla-catalogo").querySelectorAll("[data-borrar]").forEach((b) => b.onclick = async () => {
     if (!confirm("¿Borrar este modelo?")) return;
@@ -613,39 +641,57 @@ function tablaCatalogo() {
   });
 }
 
+function campoHtml(c) {
+  const etq = `${esc(c.etiqueta)}${c.unidad ? ` (${esc(c.unidad)})` : ""}`;
+  if (c.tipo === "bool") return `<label class="check"><input type="checkbox" name="${esc(c.clave)}"${c.defecto ? " checked" : ""}> ${etq}</label>`;
+  if (c.tipo === "opcion") return `<label>${etq} <select name="${esc(c.clave)}"><option value=""></option>${c.opciones.map(([v, e]) => `<option value="${esc(v)}">${esc(e)}</option>`).join("")}</select></label>`;
+  const num = c.tipo === "num" ? ` type="number" step="${c.paso ?? 1}"` : "";
+  return `<label>${etq} <input name="${esc(c.clave)}"${num}${c.requerido ? " required" : ""}></label>`;
+}
+
 function mostrarCampos() {
-  const cat = $("#frm-modelo").categoria.value;
-  $("#frm-modelo").querySelectorAll("fieldset[data-cat]").forEach((fs) => { fs.hidden = fs.dataset.cat !== cat; });
+  const f = $("#frm-modelo"), cat = f.categoria.value;
+  $("#frm-modelo-campos").innerHTML = camposDe(cat).map(campoHtml).join("");
+  if (categoriaDe(cat)?.orientable) $("#frm-modelo-campos").insertAdjacentHTML("beforeend", '<p class="ayuda">La orientación se ajusta en cada equipo colocado en el plano.</p>');
 }
 
 function cargarModelo(m) {
   const f = $("#frm-modelo");
   f.reset();
+  estado.modeloOrigen = m;
+  f.categoria.value = m.categoria;
+  mostrarCampos();
   f.id.value = m.base ? "" : m.id;
   $("#frm-modelo-titulo").textContent = m.base ? `Duplicar ${m.modelo}` : `Editar ${m.modelo}`;
-  for (const el of f.elements) {
-    if (!el.name || el.name === "id") continue;
-    if (el.name.startsWith("dori_")) el.value = m.dori?.[el.name.slice(5)] ?? "";
-    else if (m[el.name] != null) el.value = m[el.name];
+  for (const c of camposDe(m.categoria)) {
+    const el = f.elements[c.clave], v = leer(m, c.clave);
+    if (!el) continue;
+    if (c.tipo === "bool") el.checked = v ?? !!c.defecto;
+    else el.value = v ?? "";
   }
-  if (m.base) f.modelo.value = `${m.modelo} (copia)`;
-  mostrarCampos();
+  if (m.base) { f.modelo.value = `${m.modelo} (copia)`; f.generico.checked = false; }
 }
 
 $("#frm-modelo").categoria.onchange = mostrarCampos;
-$("#btn-modelo-limpiar").onclick = () => { $("#frm-modelo").reset(); $("#frm-modelo-titulo").textContent = "Agregar modelo"; mostrarCampos(); };
+$("#sel-filtro-cat").onchange = tablaCatalogo;
+$("#btn-modelo-limpiar").onclick = () => { estado.modeloOrigen = null; $("#frm-modelo").reset(); $("#frm-modelo-titulo").textContent = "Agregar modelo"; mostrarCampos(); };
 $("#frm-modelo").onsubmit = async (e) => {
   e.preventDefault();
-  const f = e.target, m = {};
-  for (const el of f.elements) {
-    if (!el.name || el.closest("fieldset[hidden]") || el.value === "") continue;
-    if (el.name.startsWith("dori_")) { (m.dori ||= {})[el.name.slice(5)] = Number(el.value); continue; }
-    m[el.name] = CAMPOS_NUM.includes(el.name) ? Number(el.value) : el.value;
+  // se parte del modelo original para no perder datos que el formulario no muestra (p. ej. analíticas)
+  const f = e.target, origen = estado.modeloOrigen?.categoria === f.categoria.value ? estado.modeloOrigen : {};
+  const m = { ...structuredClone(origen), categoria: f.categoria.value };
+  delete m.base;
+  delete m.id;
+  if (f.id.value) m.id = f.id.value;
+  for (const c of camposDe(m.categoria)) {
+    const el = f.elements[c.clave];
+    if (c.tipo === "bool") { escribir(m, c.clave, el.checked); continue; }
+    if (el.value === "") continue;
+    escribir(m, c.clave, c.tipo === "num" ? Number(el.value) : el.value);
   }
   if (m.categoria === "camara") {
     m.alcance_analitica_m ??= m.dori?.o ?? m.ir_m ?? 20;
     m.hfov ??= 90;
-    m.poe = true;
   }
   if (m.categoria === "switch") m.uso ||= "gabinete";
   await api("POST", "/api/catalogo", m);
@@ -658,6 +704,12 @@ $("#btn-catalogo").onclick = () => { tablaCatalogo(); mostrarCampos(); $("#dlg-c
 $("#btn-cerrar-cat").onclick = () => { $("#dlg-catalogo").close(); formularioParametros(); dibujar(); recalcular(); };
 
 async function cargarCatalogo() {
+  estado.esquema ||= await api("GET", "/api/catalogo/esquema");
+  const opciones = estado.esquema.categorias.map((c) => `<option value="${esc(c.id)}">${esc(c.grupo)} · ${esc(c.nombre)}</option>`).join("");
+  if (!$("#frm-modelo").categoria.options.length) {
+    $("#frm-modelo").categoria.innerHTML = opciones;
+    $("#sel-filtro-cat").innerHTML = `<option value="">Todas las categorías</option>${opciones}`;
+  }
   estado.catalogo = Object.fromEntries((await api("GET", "/api/catalogo")).map((m) => [m.id, m]));
 }
 

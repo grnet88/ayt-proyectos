@@ -1,0 +1,140 @@
+{
+  "comunes": [
+    {"clave": "marca", "etiqueta": "Marca", "tipo": "texto"},
+    {"clave": "modelo", "etiqueta": "Modelo", "tipo": "texto", "requerido": true},
+    {"clave": "consumo_w", "etiqueta": "Consumo", "tipo": "num", "unidad": "W", "paso": 0.1},
+    {"clave": "generico", "etiqueta": "Genérico de referencia", "tipo": "bool"},
+    {"clave": "fuente", "etiqueta": "Fuente del dato", "tipo": "texto"}
+  ],
+  "categorias": [
+    {"id": "camara", "nombre": "Cámara", "grupo": "CCTV", "orientable": true, "campos": [
+      {"clave": "tipo", "etiqueta": "Tipo", "tipo": "opcion", "opciones": [["domo_fijo", "Fija"], ["ptz", "PTZ"], ["lpr", "LPR"], ["termica", "Térmica"]]},
+      {"clave": "lente_mm", "etiqueta": "Lente", "tipo": "num", "unidad": "mm", "paso": 0.1},
+      {"clave": "hfov", "etiqueta": "Ángulo horizontal", "tipo": "num", "unidad": "°", "paso": 0.1, "resumen": true},
+      {"clave": "vfov", "etiqueta": "Ángulo vertical", "tipo": "num", "unidad": "°", "paso": 0.1},
+      {"clave": "dori.d", "etiqueta": "DORI detección", "tipo": "num", "unidad": "m", "paso": 0.1},
+      {"clave": "dori.o", "etiqueta": "DORI observación", "tipo": "num", "unidad": "m", "paso": 0.1},
+      {"clave": "dori.r", "etiqueta": "DORI reconocimiento", "tipo": "num", "unidad": "m", "paso": 0.1},
+      {"clave": "dori.i", "etiqueta": "DORI identificación", "tipo": "num", "unidad": "m", "paso": 0.1},
+      {"clave": "ir_m", "etiqueta": "Alcance IR", "tipo": "num", "unidad": "m", "paso": 0.1},
+      {"clave": "alcance_analitica_m", "etiqueta": "Alcance para analítica", "tipo": "num", "unidad": "m", "paso": 0.1, "resumen": true},
+      {"clave": "bitrate_mbps", "etiqueta": "Bitrate", "tipo": "num", "unidad": "Mbps", "paso": 0.1},
+      {"clave": "poe", "etiqueta": "Alimentación PoE", "tipo": "bool"}
+    ]},
+    {"id": "switch", "nombre": "Switch", "grupo": "Red", "campos": [
+      {"clave": "puertos_poe", "etiqueta": "Puertos PoE", "tipo": "num", "resumen": true, "corto": "{v} PoE"},
+      {"clave": "budget_w", "etiqueta": "Presupuesto PoE", "tipo": "num", "unidad": "W", "resumen": true},
+      {"clave": "puertos_sfp", "etiqueta": "Puertos SFP", "tipo": "num"},
+      {"clave": "uplink", "etiqueta": "Uplink", "tipo": "texto"},
+      {"clave": "administrable", "etiqueta": "Administrable", "tipo": "bool"},
+      {"clave": "uso", "etiqueta": "Uso", "tipo": "opcion", "opciones": [["gabinete", "Gabinete"], ["core", "Core"]]},
+      {"clave": "seleccion_auto", "etiqueta": "Lo elige el cálculo automático", "tipo": "bool", "defecto": true}
+    ]},
+    {"id": "router", "nombre": "Router", "grupo": "Red", "campos": [
+      {"clave": "puertos_lan", "etiqueta": "Puertos cobre", "tipo": "num", "resumen": true},
+      {"clave": "puertos_sfp", "etiqueta": "Puertos SFP/SFP+", "tipo": "num", "resumen": true, "corto": "{v} SFP"},
+      {"clave": "rack_u", "etiqueta": "Altura en rack", "tipo": "num", "unidad": "U"}
+    ]},
+    {"id": "sfp", "nombre": "Módulo SFP", "grupo": "Red", "campos": [
+      {"clave": "tipo", "etiqueta": "Tipo", "tipo": "opcion", "opciones": [["bidi", "BiDi (1 pelo)"], ["duplex", "Dúplex (2 pelos)"]]},
+      {"clave": "velocidad_gbps", "etiqueta": "Velocidad", "tipo": "num", "unidad": "Gbps", "paso": 0.01, "resumen": true},
+      {"clave": "longitud_onda", "etiqueta": "Longitud de onda", "tipo": "texto", "unidad": "nm"},
+      {"clave": "alcance_km", "etiqueta": "Alcance", "tipo": "num", "unidad": "km", "paso": 0.1, "resumen": true},
+      {"clave": "potencia_tx_dbm", "etiqueta": "Potencia de emisión mínima", "tipo": "num", "unidad": "dBm", "paso": 0.1},
+      {"clave": "sensibilidad_dbm", "etiqueta": "Sensibilidad", "tipo": "num", "unidad": "dBm", "paso": 0.1},
+      {"clave": "conector", "etiqueta": "Conector", "tipo": "opcion", "opciones": [["LC", "LC"], ["SC", "SC"]]},
+      {"clave": "en_par", "etiqueta": "Se compra en par", "tipo": "bool"}
+    ]},
+    {"id": "radio", "nombre": "Radioenlace / antena", "grupo": "Enlaces", "orientable": true, "campos": [
+      {"clave": "uso", "etiqueta": "Uso", "tipo": "opcion", "opciones": [["ptp", "Punto a punto"], ["ptmp_ap", "Punto a multipunto, base"], ["ptmp_cpe", "Punto a multipunto, cliente"]]},
+      {"clave": "banda_ghz", "etiqueta": "Banda", "tipo": "num", "unidad": "GHz", "paso": 0.1, "resumen": true},
+      {"clave": "ganancia_dbi", "etiqueta": "Ganancia de antena", "tipo": "num", "unidad": "dBi", "paso": 0.1, "resumen": true},
+      {"clave": "haz_h", "etiqueta": "Apertura horizontal", "tipo": "num", "unidad": "°", "paso": 0.1},
+      {"clave": "haz_v", "etiqueta": "Apertura vertical", "tipo": "num", "unidad": "°", "paso": 0.1},
+      {"clave": "potencia_tx_dbm", "etiqueta": "Potencia de emisión", "tipo": "num", "unidad": "dBm", "paso": 0.1},
+      {"clave": "sensibilidad_dbm", "etiqueta": "Sensibilidad a la tasa de diseño", "tipo": "num", "unidad": "dBm", "paso": 0.1},
+      {"clave": "ancho_canal_mhz", "etiqueta": "Ancho de canal", "tipo": "num", "unidad": "MHz"},
+      {"clave": "throughput_mbps", "etiqueta": "Capacidad real", "tipo": "num", "unidad": "Mbps", "resumen": true},
+      {"clave": "alcance_max_km", "etiqueta": "Alcance máximo recomendado", "tipo": "num", "unidad": "km", "paso": 0.1, "resumen": true},
+      {"clave": "clientes_max", "etiqueta": "Clientes recomendados (base)", "tipo": "num"},
+      {"clave": "alimentacion", "etiqueta": "Alimentación", "tipo": "texto"}
+    ]},
+    {"id": "internet", "nombre": "Enlace de internet", "grupo": "Enlaces", "campos": [
+      {"clave": "tecnologia", "etiqueta": "Tecnología", "tipo": "opcion", "opciones": [["ftth", "Fibra hogar (FTTH)"], ["dedicado", "Fibra dedicada"], ["radio", "Radio de proveedor"], ["celular", "4G/5G"], ["satelital", "Satelital"]], "resumen": true},
+      {"clave": "bajada_mbps", "etiqueta": "Bajada", "tipo": "num", "unidad": "Mbps", "resumen": true},
+      {"clave": "subida_mbps", "etiqueta": "Subida", "tipo": "num", "unidad": "Mbps", "resumen": true},
+      {"clave": "ip_fija", "etiqueta": "IP fija", "tipo": "bool"},
+      {"clave": "sla", "etiqueta": "Disponibilidad / SLA", "tipo": "texto"}
+    ]},
+    {"id": "olt", "nombre": "OLT", "grupo": "Fibra", "campos": [
+      {"clave": "puertos_pon", "etiqueta": "Puertos PON", "tipo": "num", "resumen": true},
+      {"clave": "split_max", "etiqueta": "ONU por puerto", "tipo": "num", "resumen": true, "corto": "1:{v} por PON"},
+      {"clave": "potencia_tx_dbm", "etiqueta": "Potencia de emisión mínima", "tipo": "num", "unidad": "dBm", "paso": 0.1},
+      {"clave": "clase_optica", "etiqueta": "Clase óptica", "tipo": "opcion", "opciones": [["B+", "B+ (28 dB)"], ["C+", "C+ (32 dB)"]]},
+      {"clave": "rack_u", "etiqueta": "Altura en rack", "tipo": "num", "unidad": "U"}
+    ]},
+    {"id": "onu", "nombre": "ONU", "grupo": "Fibra", "campos": [
+      {"clave": "puertos_lan", "etiqueta": "Puertos LAN", "tipo": "num", "resumen": true},
+      {"clave": "sensibilidad_dbm", "etiqueta": "Sensibilidad", "tipo": "num", "unidad": "dBm", "paso": 0.1}
+    ]},
+    {"id": "splitter", "nombre": "Splitter", "grupo": "Fibra", "campos": [
+      {"clave": "salidas", "etiqueta": "Salidas", "tipo": "num", "resumen": true, "corto": "1x{v}"},
+      {"clave": "perdida_db", "etiqueta": "Pérdida de inserción máxima", "tipo": "num", "unidad": "dB", "paso": 0.1, "resumen": true},
+      {"clave": "tecnologia", "etiqueta": "Tecnología", "tipo": "opcion", "opciones": [["plc", "PLC"], ["fbt", "FBT"]]},
+      {"clave": "formato", "etiqueta": "Formato", "tipo": "texto"}
+    ]},
+    {"id": "cable_fo", "nombre": "Cable de fibra", "grupo": "Fibra", "campos": [
+      {"clave": "tipo", "etiqueta": "Tipo", "tipo": "opcion", "opciones": [["adss", "ADSS aéreo"], ["ducto", "Para ducto"], ["armado", "Armado / directo enterrado"], ["drop", "Drop"]]},
+      {"clave": "pelos", "etiqueta": "Pelos", "tipo": "num", "resumen": true},
+      {"clave": "atenuacion_1310", "etiqueta": "Atenuación 1310 nm", "tipo": "num", "unidad": "dB/km", "paso": 0.01},
+      {"clave": "atenuacion_1550", "etiqueta": "Atenuación 1550 nm", "tipo": "num", "unidad": "dB/km", "paso": 0.01, "resumen": true},
+      {"clave": "vano_max_m", "etiqueta": "Vano máximo", "tipo": "num", "unidad": "m"},
+      {"clave": "antirroedor", "etiqueta": "Antirroedor", "tipo": "bool"}
+    ]},
+    {"id": "odf", "nombre": "ODF / patchera de fibra", "grupo": "Fibra", "campos": [
+      {"clave": "puertos", "etiqueta": "Puertos", "tipo": "num", "resumen": true},
+      {"clave": "conector", "etiqueta": "Conector", "tipo": "texto", "resumen": true},
+      {"clave": "rack_u", "etiqueta": "Altura en rack", "tipo": "num", "unidad": "U"}
+    ]},
+    {"id": "caja_fo", "nombre": "Caja de fibra", "grupo": "Fibra", "campos": [
+      {"clave": "tipo", "etiqueta": "Tipo", "tipo": "opcion", "opciones": [["empalme", "Caja de empalme"], ["nap", "NAP / CTO de distribución"]], "resumen": true},
+      {"clave": "fusiones", "etiqueta": "Capacidad de fusiones", "tipo": "num", "resumen": true},
+      {"clave": "puertos", "etiqueta": "Puertos de salida", "tipo": "num"},
+      {"clave": "ip", "etiqueta": "Grado de protección", "tipo": "texto"}
+    ]},
+    {"id": "rack", "nombre": "Rack", "grupo": "Racks y gabinetes", "campos": [
+      {"clave": "tipo", "etiqueta": "Tipo", "tipo": "opcion", "opciones": [["mural", "Mural"], ["pie", "De pie"], ["abierto", "Abierto"]], "resumen": true},
+      {"clave": "unidades_u", "etiqueta": "Unidades", "tipo": "num", "unidad": "U", "resumen": true},
+      {"clave": "ancho_mm", "etiqueta": "Ancho", "tipo": "num", "unidad": "mm"},
+      {"clave": "profundidad_mm", "etiqueta": "Profundidad", "tipo": "num", "unidad": "mm", "resumen": true},
+      {"clave": "alto_mm", "etiqueta": "Alto", "tipo": "num", "unidad": "mm"},
+      {"clave": "carga_kg", "etiqueta": "Carga máxima", "tipo": "num", "unidad": "kg"}
+    ]},
+    {"id": "gabinete_ext", "nombre": "Gabinete de intemperie", "grupo": "Racks y gabinetes", "campos": [
+      {"clave": "alto_mm", "etiqueta": "Alto", "tipo": "num", "unidad": "mm", "resumen": true},
+      {"clave": "ancho_mm", "etiqueta": "Ancho", "tipo": "num", "unidad": "mm", "resumen": true},
+      {"clave": "profundidad_mm", "etiqueta": "Profundidad", "tipo": "num", "unidad": "mm", "resumen": true},
+      {"clave": "ip", "etiqueta": "Grado de protección", "tipo": "texto"},
+      {"clave": "riel_din", "etiqueta": "Con riel DIN", "tipo": "bool"},
+      {"clave": "montaje", "etiqueta": "Montaje", "tipo": "opcion", "opciones": [["poste", "Poste"], ["pared", "Pared"]]}
+    ]},
+    {"id": "soporte", "nombre": "Poste / soporte", "grupo": "Racks y gabinetes", "campos": [
+      {"clave": "tipo", "etiqueta": "Tipo", "tipo": "opcion", "opciones": [["columna", "Columna"], ["poste", "Poste"], ["brazo", "Brazo"], ["mastil", "Mástil para antena"]], "resumen": true},
+      {"clave": "altura_m", "etiqueta": "Altura o largo", "tipo": "num", "unidad": "m", "paso": 0.1, "resumen": true},
+      {"clave": "seccion", "etiqueta": "Sección", "tipo": "texto"}
+    ]},
+    {"id": "ups", "nombre": "UPS", "grupo": "Energía", "campos": [
+      {"clave": "potencia_va", "etiqueta": "Potencia", "tipo": "num", "unidad": "VA", "resumen": true},
+      {"clave": "potencia_w", "etiqueta": "Potencia activa", "tipo": "num", "unidad": "W"},
+      {"clave": "topologia", "etiqueta": "Topología", "tipo": "opcion", "opciones": [["online", "Online doble conversión"], ["interactiva", "Interactiva"]]},
+      {"clave": "autonomia_min", "etiqueta": "Autonomía a plena carga", "tipo": "num", "unidad": "min", "resumen": true},
+      {"clave": "rack_u", "etiqueta": "Altura en rack", "tipo": "num", "unidad": "U"},
+      {"clave": "seleccion_auto", "etiqueta": "La elige el cálculo automático", "tipo": "bool", "defecto": true}
+    ]},
+    {"id": "fuente", "nombre": "Fuente / inyector", "grupo": "Energía", "campos": [
+      {"clave": "tension_v", "etiqueta": "Tensión de salida", "tipo": "num", "unidad": "V", "paso": 0.1, "resumen": true},
+      {"clave": "corriente_a", "etiqueta": "Corriente", "tipo": "num", "unidad": "A", "paso": 0.1, "resumen": true},
+      {"clave": "montaje", "etiqueta": "Montaje", "tipo": "opcion", "opciones": [["din", "Riel DIN"], ["suelta", "Suelta / enchufable"], ["inyector", "Inyector PoE"]]}
+    ]}
+  ]
+}
