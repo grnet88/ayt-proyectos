@@ -12,6 +12,7 @@ Estado actual: **v0.2, cimientos (usuarios, roles, escenarios) sobre el prototip
 Requiere Python 3.11 o superior y conexión a internet para ver el mapa satelital.
 
 - **Windows:** doble clic en `iniciar.bat`. Abre el navegador en http://localhost:8000.
+- **Windows Server / acceso en red:** ver [docs/INSTALAR-WINDOWS.md](docs/INSTALAR-WINDOWS.md).
 - **Linux:** `./iniciar.sh` y abrir http://localhost:8000.
 
 Los proyectos se guardan en `datos/ayt.db` (SQLite). Para usar otra ubicación, definir la variable
