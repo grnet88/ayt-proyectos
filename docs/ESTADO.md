@@ -34,6 +34,13 @@
 Probado: 14 pruebas automáticas y recorrido completo en navegador (configuración, llave, ingreso,
 distribución, duplicar escenario, usuario visor de solo lectura, recuperación y rechazo de la llave usada).
 
+## Orientación de dispositivos (2026-10-20)
+
+- Todo elemento puntual (cámara, gabinete, rack, UPS) tiene orientación: `properties.azimut`, grados enteros
+  0-359 desde el norte en sentido horario. El ícono gira y una muesca amarilla marca el frente.
+- Se edita con el control deslizante y el campo del panel, con los botones ±15°, con R / Shift+R, o
+  arrastrando el punto amarillo que aparece alrededor del elemento seleccionado (el cono se ve girar en vivo).
+
 ## Qué funcionaba desde la v0.1 (etapa 1)
 
 - Proyectos: crear, renombrar, cliente, categoría, borrar. Se guardan solos.
