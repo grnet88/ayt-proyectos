@@ -72,7 +72,7 @@ distribución, duplicar escenario, usuario visor de solo lectura, recuperación 
   Sin inclinación cargada se usa la automática: el borde superior del campo vertical toca el piso en el alcance.
 - Con eso se calculan la zona ciega real bajo la cámara, el alcance efectivo sobre el piso y los PPM en el
   borde (por resolución si el modelo la tiene, o por el DORI del datasheet: identificación = 250 PPM).
-  Avisos: PPM por debajo del mínimo (parámetro, 62 = observación) y cámara que mira demasiado al piso.
+  Avisos agrupados: PPM por debajo del mínimo (parámetro, 25 = detección) y cámaras que miran demasiado al piso.
 - Herramientas Muro / pared (línea) y Obstáculo (polígono): cortan la línea de vista en planta. El cono
   se recorta en el mapa y la cobertura del perímetro los tiene en cuenta.
 - Motor: `backend/app/engine/optica.py`, `geo.visible`; pruebas en `tests/test_optica.py`.

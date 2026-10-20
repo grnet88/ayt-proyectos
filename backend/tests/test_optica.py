@@ -66,4 +66,4 @@ def test_muro_bloquea_la_cobertura_y_avisa_inclinacion():
     cam = next(f for f in p["elementos"] if f["properties"]["tipo"] == "camara")
     cam["properties"]["inclinacion"] = 60
     r = calcular(p, CATALOGO)
-    assert any("ve el piso solo" in a for a in r["advertencias"])
+    assert any("inclinada(s) de más" in a for a in r["advertencias"])
