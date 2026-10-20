@@ -22,7 +22,7 @@ PARAMETROS_DEFAULT = {
     "angulo_quiebre": 25.0,  # giro (°) a partir del cual un vértice es esquina y lleva cámara
     "dist_min_camara_m": 2.0,  # zona ciega si el modelo no informa ángulo vertical (PTZ, etc.)
     "altura_camara_m": 4.0,  # altura de montaje por defecto
-    "ppm_minimo": 62.0,  # PPM mínimo en el borde del alcance (62 = observación DORI)
+    "ppm_minimo": 25.0,  # PPM mínimo en el borde del alcance (25 = detección, IEC 62676-4)
     "muestreo_cobertura_m": 1.0,
     "reserva_utp_m": 5.0,
     "limite_utp_m": 90.0,
@@ -403,6 +403,7 @@ def calcular(proyecto: dict, catalogo: dict[str, dict]) -> dict:
         bloqueos += list(zip(pts, pts[1:]))
     det_cam = []
     sectores = []
+    ppm_bajo, al_piso = [], []
     for c in camaras:
         m = catalogo.get(c["properties"].get("modelo"))
         if not m:
@@ -411,12 +412,20 @@ def calcular(proyecto: dict, catalogo: dict[str, dict]) -> dict:
         det_cam.append({"id": c["id"], "nombre": c["properties"].get("nombre", ""), **o})
         sectores.append((u_cam[c["id"]][0], float(c["properties"].get("azimut", 0)), m["hfov"],
                          o["zona_ciega_m"], o["alcance_efectivo_m"]))
+        nombre = c["properties"].get("nombre", c["id"])
         if o["ppm_borde"] is not None and o["ppm_borde"] < p["ppm_minimo"]:
-            adv.append(f"{c['properties'].get('nombre', c['id'])}: {o['ppm_borde']} PPM en el borde del alcance "
-                       f"({o['alcance_efectivo_m']} m), por debajo de {p['ppm_minimo']:g}. Acortá el alcance o usá otra lente.")
+            ppm_bajo.append(f"{nombre} ({o['ppm_borde']:g})")
         if o["borde_lejano_m"] is not None and o["borde_lejano_m"] < o["alcance_m"] * 0.8:
-            adv.append(f"{c['properties'].get('nombre', c['id'])}: con {o['inclinacion']}° de inclinación ve el piso solo "
-                       f"hasta {o['borde_lejano_m']} m de los {o['alcance_m']:g} m de alcance. Levantala o subí la altura.")
+            al_piso.append(f"{nombre} (hasta {o['borde_lejano_m']:g} m de {o['alcance_m']:g})")
+
+    def resumir(lista, maximo=5):
+        return ", ".join(lista[:maximo]) + (f" y {len(lista) - maximo} más" if len(lista) > maximo else "")
+    if ppm_bajo:
+        adv.append(f"{len(ppm_bajo)} cámara(s) con menos de {p['ppm_minimo']:g} PPM en el borde del alcance: "
+                   f"{resumir(ppm_bajo)}. Acortá el alcance, usá otra lente o bajá el mínimo en los parámetros.")
+    if al_piso:
+        adv.append(f"{len(al_piso)} cámara(s) inclinada(s) de más, ven el piso solo hasta: {resumir(al_piso)}. "
+                   "Levantalas o subí la altura.")
 
     # ---------------- cobertura sobre el perímetro
     cobertura = {"pct": None, "huecos": [], "largo_m": round(sum(r.largo for r in recorridos), 1)}
