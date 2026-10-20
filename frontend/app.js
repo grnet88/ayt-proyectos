@@ -52,6 +52,8 @@ const estado = {
   seleccion: null,
   calculo: null,
   guardando: null,
+  capasSector: {},
+  marcadores: {},
 };
 
 // --------------------------------------------------------------------------- mapa
@@ -103,16 +105,39 @@ const porTipo = (t) => elementos().filter((f) => f.properties.tipo === t);
 const buscar = (id) => elementos().find((f) => f.id === id);
 const param = (k) => estado.escenario?.parametros?.[k] ?? estado.defaults[k];
 
+const azimut = (f) => (Math.round(Number(f.properties.azimut) || 0) % 360 + 360) % 360;
+const RUMBOS = ["N", "NE", "E", "SE", "S", "SO", "O", "NO"];
+const rumbo = (az) => RUMBOS[Math.round(az / 45) % 8];
+
 function iconoPara(f) {
-  const t = f.properties.tipo, sel = estado.seleccion === f.id ? " sel" : "";
+  const t = f.properties.tipo, sel = estado.seleccion === f.id ? " sel" : "", az = azimut(f);
+  // el contenedor gira con la orientación y la muesca marca el frente; el texto se contra-gira para leerse derecho
   if (t === "camara") {
     const m = estado.catalogo[f.properties.modelo] || {};
     const clase = m.tipo === "ptz" ? " ptz" : m.tipo === "lpr" ? " lpr" : "";
-    return L.divIcon({ className: "", html: `<div class="icono-elemento icono-camara${clase}${sel}" style="width:14px;height:14px"></div>`, iconSize: [14, 14] });
+    return L.divIcon({ className: "", iconSize: [14, 14],
+      html: `<div class="girable" style="transform:rotate(${az}deg)"><div class="icono-elemento icono-camara${clase}${sel}" style="width:14px;height:14px"></div></div>` });
   }
   const txt = { gabinete: "G", central: "R", ups: "U" }[t];
   const tam = t === "central" ? 22 : 18;
-  return L.divIcon({ className: "", html: `<div class="icono-elemento icono-${t}${sel}" style="width:${tam}px;height:${tam}px">${txt}</div>`, iconSize: [tam, tam] });
+  return L.divIcon({ className: "", iconSize: [tam, tam],
+    html: `<div class="girable" style="transform:rotate(${az}deg)"><div class="icono-elemento icono-${t}${sel}" style="width:${tam}px;height:${tam}px"><span style="transform:rotate(${-az}deg)">${txt}</span></div></div>` });
+}
+
+// manija de giro: punto que se arrastra alrededor del elemento seleccionado
+const RADIO_MANIJA = 48;
+function posManija(lat, lon, az) {
+  const c = mapa.latLngToLayerPoint([lat, lon]), r = (az * Math.PI) / 180;
+  return mapa.layerPointToLatLng(L.point(c.x + RADIO_MANIJA * Math.sin(r), c.y - RADIO_MANIJA * Math.cos(r)));
+}
+function azimutHacia(lat, lon, latlng) {
+  const c = mapa.latLngToLayerPoint([lat, lon]), p = mapa.latLngToLayerPoint(latlng);
+  return (Math.round((Math.atan2(p.x - c.x, -(p.y - c.y)) * 180) / Math.PI) + 360) % 360;
+}
+
+function girar(f, az) {
+  f.properties.azimut = ((Math.round(az) % 360) + 360) % 360;
+  delete f.properties.auto;
 }
 
 function dibujar() {
@@ -120,6 +145,8 @@ function dibujar() {
   capaSectores.clearLayers();
   capaPuntos.clearLayers();
   capaRed.clearLayers();
+  estado.capasSector = {};
+  estado.marcadores = {};
   const verCob = $("#chk-coberturas").checked;
 
   for (const f of porTipo("perimetro")) {
@@ -157,7 +184,9 @@ function dibujar() {
         const color = m.tipo === "ptz" ? "#26a69a" : m.tipo === "lpr" ? "#a1887f" : "#42a5f5";
         const pts = sector(lat, lon, Number(f.properties.azimut) || 0, m.hfov, r, param("dist_min_camara_m"));
         const opciones = { color, weight: 1, fillOpacity: 0.18, interactive: false };
-        (pts ? L.polygon(pts, opciones) : L.circle([lat, lon], { ...opciones, radius: r, dashArray: "4 4" })).addTo(capaSectores);
+        const capa = (pts ? L.polygon(pts, opciones) : L.circle([lat, lon], { ...opciones, radius: r, dashArray: "4 4" })).addTo(capaSectores);
+        if (pts) capa.actualizar = (az) => capa.setLatLngs(sector(lat, lon, az, m.hfov, r, param("dist_min_camara_m")));
+        estado.capasSector[f.id] = capa;
       }
     }
     const mk = L.marker([lat, lon], { icon: iconoPara(f), draggable: !estado.soloLectura, title: f.properties.nombre || f.properties.tipo });
@@ -169,8 +198,28 @@ function dibujar() {
       cambio();
     });
     mk.addTo(capaPuntos);
+    estado.marcadores[f.id] = mk;
+    if (estado.seleccion === f.id && !estado.soloLectura) manija(f, lat, lon);
   }
   dibujarHuecos();
+}
+
+function manija(f, lat, lon) {
+  const linea = L.polyline([[lat, lon], posManija(lat, lon, azimut(f))], { color: "#ffeb3b", weight: 2, dashArray: "3 3", interactive: false }).addTo(capaPuntos);
+  const mk = L.marker(posManija(lat, lon, azimut(f)), {
+    draggable: true, zIndexOffset: 1000, title: "Arrastrá para girar",
+    icon: L.divIcon({ className: "", html: '<div class="manija-giro"></div>', iconSize: [14, 14] }),
+  }).addTo(capaPuntos);
+  mk.on("drag", (e) => {
+    const az = azimutHacia(lat, lon, e.target.getLatLng());
+    girar(f, az);
+    linea.setLatLngs([[lat, lon], posManija(lat, lon, az)]);
+    estado.capasSector[f.id]?.actualizar?.(az);
+    estado.marcadores[f.id]?.setIcon(iconoPara(f));
+    actualizarOrientacionInspector(f);
+  });
+  mk.on("dragend", () => { dibujar(); cambio(); });
+  mk.on("click", (e) => L.DomEvent.stopPropagation(e));
 }
 
 function dibujarHuecos() {
@@ -184,6 +233,7 @@ function dibujarHuecos() {
 }
 
 const round7 = (v) => Math.round(v * 1e7) / 1e7;
+mapa.on("zoomend", () => { if (estado.seleccion && estado.escenario) dibujar(); });
 
 function seleccionar(id) {
   if (estado.seleccion !== id) estado.editandoVertices = false;
@@ -256,6 +306,13 @@ mapa.on("click", (e) => {
 document.querySelectorAll("[data-herr]").forEach((b) => b.addEventListener("click", () => usarHerramienta(b.dataset.herr)));
 document.addEventListener("keydown", (e) => {
   if (e.key === "Escape") usarHerramienta(null);
+  const f = !estado.soloLectura && estado.seleccion && !/INPUT|SELECT|TEXTAREA/.test(document.activeElement.tagName) ? buscar(estado.seleccion) : null;
+  if (f && f.geometry.type === "Point" && (e.key === "r" || e.key === "R")) {
+    girar(f, azimut(f) + (e.shiftKey ? -15 : 15));
+    actualizarOrientacionInspector(f);
+    dibujar();
+    cambio();
+  }
   if (e.key === "Delete" && !estado.soloLectura && estado.seleccion && !/INPUT|SELECT|TEXTAREA/.test(document.activeElement.tagName)) borrar(estado.seleccion);
 });
 
@@ -272,13 +329,20 @@ function inspector() {
   if (!f) return;
   const p = f.properties, cuerpo = $("#inspector-cuerpo");
   let html = `<label>Nombre <input data-prop="nombre" value="${esc(p.nombre || "")}"></label>`;
+  if (f.geometry.type === "Point") html += `
+      <label>Orientación <span class="etiqueta" id="rumbo">${azimut(f)}° ${rumbo(azimut(f))}</span>
+        <input data-prop="azimut" type="range" min="0" max="359" value="${azimut(f)}"></label>
+      <div class="fila orientacion">
+        <button type="button" data-girar="-15" title="Girar 15° a la izquierda (Shift+R)">⟲ 15°</button>
+        <input data-prop="azimut" type="number" min="0" max="359" value="${azimut(f)}" title="Grados desde el norte, en sentido horario">
+        <button type="button" data-girar="15" title="Girar 15° a la derecha (R)">15° ⟳</button>
+      </div>
+      <p class="ayuda edicion">También podés girarlo arrastrando el punto amarillo en el mapa, o con R / Shift+R.</p>`;
   if (p.tipo === "camara") {
     const m = estado.catalogo[p.modelo] || {};
     const gabs = porTipo("gabinete").map((g) => `<option value="${esc(g.id)}" ${g.id === p.gabinete ? "selected" : ""}>${esc(g.properties.nombre || g.id)}</option>`).join("");
     html += `
       <label>Modelo <select data-prop="modelo">${opcionesModelos("camara", p.modelo)}</select></label>
-      <label>Orientación (°) <input data-prop="azimut" type="range" min="0" max="359" value="${Number(p.azimut) || 0}">
-        <input data-prop="azimut" type="number" min="0" max="359" value="${Number(p.azimut) || 0}"></label>
       <label>Alcance analítica (m) <input data-prop="alcance" type="number" step="0.5" placeholder="${esc(m.alcance_analitica_m ?? "")} (del modelo)" value="${esc(p.alcance ?? "")}"></label>
       <label>Gabinete <select data-prop="gabinete"><option value="">Más cercano</option>${gabs}</select></label>
       <p class="ayuda">Ángulo ${fmt(m.hfov)}° · DORI D/O/R/I ${fmt(m.dori?.d, 1)} / ${fmt(m.dori?.o, 1)} / ${fmt(m.dori?.r, 1)} / ${fmt(m.dori?.i, 1)} m · IR ${fmt(m.ir_m)} m · ${fmt(m.consumo_w, 1)} W</p>`;
@@ -301,15 +365,28 @@ function inspector() {
     const k = inp.dataset.prop;
     let v = inp.value;
     if (["azimut", "alcance"].includes(k)) v = v === "" ? null : Number(v);
-    if (v === null || v === "") delete p[k]; else p[k] = v;
-    if (k === "azimut") cuerpo.querySelectorAll('[data-prop="azimut"]').forEach((o) => { if (o !== inp) o.value = v; });
+    if (k === "azimut") { if (v === null) return; girar(f, v); actualizarOrientacionInspector(f, inp); }
+    else if (v === null || v === "") delete p[k]; else p[k] = v;
     delete p.auto;
     dibujar();
     cambio();
   }));
+  cuerpo.querySelectorAll("[data-girar]").forEach((b) => b.onclick = () => {
+    girar(f, azimut(f) + Number(b.dataset.girar));
+    actualizarOrientacionInspector(f);
+    dibujar();
+    cambio();
+  });
   cuerpo.querySelector("#btn-borrar-el").onclick = () => borrar(f.id);
   const bv = cuerpo.querySelector("#btn-vertices");
   if (bv) bv.onclick = () => { estado.editandoVertices = !estado.editandoVertices; dibujar(); inspector(); };
+}
+
+function actualizarOrientacionInspector(f, excepto) {
+  const cuerpo = $("#inspector-cuerpo"), az = azimut(f);
+  cuerpo.querySelectorAll('[data-prop="azimut"]').forEach((o) => { if (o !== excepto) o.value = az; });
+  const r = cuerpo.querySelector("#rumbo");
+  if (r) r.textContent = `${az}° ${rumbo(az)}`;
 }
 
 // --------------------------------------------------------------------------- resultados
