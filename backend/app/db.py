@@ -18,6 +18,7 @@ from pathlib import Path
 
 RUTA_DB = Path(os.environ.get("AYT_DB", Path(__file__).resolve().parents[2] / "datos" / "ayt.db"))
 CATALOGO_BASE = Path(__file__).with_name("catalogo_base.json")
+ESQUEMA_CATALOGO = Path(__file__).with_name("catalogo_esquema.json")
 VERSION_ESQUEMA = 2
 
 PLANTA_EXTERIOR = {"id": "exterior", "nombre": "Exterior", "tipo": "mapa"}
@@ -126,6 +127,11 @@ def auditoria(limite: int = 200) -> list[dict]:
 
 
 # --------------------------------------------------------------------------- catálogo
+
+
+def esquema_catalogo() -> dict:
+    """Categorías del catálogo y los campos de cada una; la interfaz arma el formulario con esto."""
+    return json.loads(ESQUEMA_CATALOGO.read_text(encoding="utf-8"))
 
 
 def catalogo() -> dict[str, dict]:

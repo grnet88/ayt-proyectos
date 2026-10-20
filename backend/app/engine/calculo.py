@@ -65,6 +65,11 @@ def _solo_mapa(proyecto: dict) -> dict:
     return {**proyecto, "elementos": [f for f in proyecto.get("elementos", []) if _en_mapa(f)]}
 
 
+def _auto(modelo: dict) -> bool:
+    """Los modelos con seleccion_auto en falso (genéricos de referencia) no los elige el cálculo solo."""
+    return modelo.get("seleccion_auto", True)
+
+
 def _por_tipo(proyecto: dict, tipo: str) -> list[dict]:
     return [f for f in proyecto.get("elementos", []) if f.get("properties", {}).get("tipo") == tipo]
 
@@ -286,7 +291,7 @@ def calcular(proyecto: dict, catalogo: dict[str, dict]) -> dict:
         adv.append("Hay cámaras pero ningún gabinete: no se puede calcular UTP ni switches.")
 
     switches = sorted(
-        (m for m in catalogo.values() if m["categoria"] == "switch" and m.get("uso") == "gabinete"),
+        (m for m in catalogo.values() if m["categoria"] == "switch" and m.get("uso") == "gabinete" and _auto(m)),
         key=lambda m: (m["puertos_poe"], m["budget_w"]),
     )
 
@@ -380,7 +385,7 @@ def calcular(proyecto: dict, catalogo: dict[str, dict]) -> dict:
             e["carga_va"] += sum(dg["consumo_w"] for _, dg in lista) / ef / p["factor_potencia"]
             e["cable_m"] += largo
             e["caida_max_pct"] = max(e["caida_max_pct"], round(peor, 2))
-        ups_cat = sorted((m for m in catalogo.values() if m["categoria"] == "ups"), key=lambda m: m["potencia_va"])
+        ups_cat = sorted((m for m in catalogo.values() if m["categoria"] == "ups" and _auto(m)), key=lambda m: m["potencia_va"])
         for e in por_fuente.values():
             req = e["carga_va"] * p["margen_ups"]
             ups = next((m for m in ups_cat if m["potencia_va"] >= req), None)

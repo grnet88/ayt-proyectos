@@ -150,49 +150,15 @@
       <button id="btn-cerrar-cat">Cerrar</button>
     </div>
     <div class="dlg-cuerpo">
-      <div id="tabla-catalogo"></div>
+      <div>
+        <label>Ver <select id="sel-filtro-cat"></select></label>
+        <div id="tabla-catalogo"></div>
+      </div>
       <form id="frm-modelo">
         <h3 id="frm-modelo-titulo">Agregar modelo</h3>
         <input type="hidden" name="id">
-        <label>Categoría
-          <select name="categoria">
-            <option value="camara">Cámara</option>
-            <option value="switch">Switch</option>
-            <option value="ups">UPS</option>
-            <option value="onu">ONU</option>
-            <option value="olt">OLT</option>
-            <option value="router">Router</option>
-          </select>
-        </label>
-        <label>Marca <input name="marca"></label>
-        <label>Modelo <input name="modelo" required></label>
-        <fieldset data-cat="camara">
-          <label>Tipo
-            <select name="tipo"><option value="domo_fijo">Fija</option><option value="ptz">PTZ</option>
-              <option value="lpr">LPR</option><option value="termica">Térmica</option></select>
-          </label>
-          <label>Lente (mm) <input name="lente_mm" type="number" step="0.1"></label>
-          <label>Ángulo horizontal (°) <input name="hfov" type="number" step="0.1"></label>
-          <label>Ángulo vertical (°) <input name="vfov" type="number" step="0.1"></label>
-          <label>DORI detección (m) <input name="dori_d" type="number" step="0.1"></label>
-          <label>DORI observación (m) <input name="dori_o" type="number" step="0.1"></label>
-          <label>DORI reconocimiento (m) <input name="dori_r" type="number" step="0.1"></label>
-          <label>DORI identificación (m) <input name="dori_i" type="number" step="0.1"></label>
-          <label>Alcance IR (m) <input name="ir_m" type="number" step="0.1"></label>
-          <label>Alcance para analítica (m) <input name="alcance_analitica_m" type="number" step="0.1"></label>
-          <label>Bitrate (Mbps) <input name="bitrate_mbps" type="number" step="0.1"></label>
-        </fieldset>
-        <fieldset data-cat="switch">
-          <label>Puertos PoE <input name="puertos_poe" type="number"></label>
-          <label>Presupuesto PoE (W) <input name="budget_w" type="number"></label>
-          <label>Uso
-            <select name="uso"><option value="gabinete">Gabinete</option><option value="core">Core</option></select>
-          </label>
-        </fieldset>
-        <fieldset data-cat="ups">
-          <label>Potencia (VA) <input name="potencia_va" type="number"></label>
-        </fieldset>
-        <label>Consumo (W) <input name="consumo_w" type="number" step="0.1"></label>
+        <label>Categoría <select name="categoria"></select></label>
+        <div id="frm-modelo-campos"></div>
         <div class="fila">
           <button class="primario">Guardar</button>
           <button type="button" id="btn-modelo-limpiar">Limpiar</button>

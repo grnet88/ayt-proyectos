@@ -2,6 +2,17 @@
 
 Última actualización: 2026-10-20.
 
+## Catálogo ampliado (en curso)
+
+- 17 categorías con sus parámetros de diseño en `backend/app/catalogo_esquema.json`: además de cámaras, switches,
+  UPS, ONU, OLT y routers, ahora hay racks, gabinetes de intemperie, postes, radioenlaces PtP y PtMP, enlaces de
+  internet, módulos SFP, splitters, cables de fibra, ODF, cajas de fibra y fuentes.
+- 68 modelos base: reales de los datasheets y listados de obras, y genéricos de referencia marcados como tales.
+- El formulario del catálogo se arma con el esquema; la tabla se puede filtrar por categoría.
+- Los genéricos no cambian el cálculo automático (`seleccion_auto: false`). Detalle en [CATALOGO.md](CATALOGO.md).
+- Falta: colocar antenas, cajas de fibra y acometidas de internet en el plano y calcular enlaces de radio y
+  presupuesto óptico con estos parámetros (etapa 2).
+
 ## Qué se agregó en la v0.2 (etapa 0, cimientos)
 
 - **Usuarios y roles:** superadministrador `aytroot` (fijo, no se puede borrar ni cambiar de rol, solo él
