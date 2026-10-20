@@ -171,8 +171,8 @@ function iconoPara(f) {
     return L.divIcon({ className: "", iconSize: [14, 14],
       html: `<div class="girable" style="transform:rotate(${az}deg)"><div class="icono-elemento icono-camara${clase}${sel}" style="width:14px;height:14px"></div></div>` });
   }
-  const txt = { gabinete: "G", central: "R", ups: "U" }[t];
-  const tam = t === "central" ? 22 : 18;
+  const txt = { gabinete: "G", central: "R", ups: "U", camara_paso: "CP" }[t];
+  const tam = t === "central" ? 22 : t === "camara_paso" ? 16 : 18;
   return L.divIcon({ className: "", iconSize: [tam, tam],
     html: `<div class="girable" style="transform:rotate(${az}deg)"><div class="icono-elemento icono-${t}${sel}" style="width:${tam}px;height:${tam}px"><span style="transform:rotate(${-az}deg)">${txt}</span></div></div>` });
 }
@@ -202,12 +202,14 @@ function dibujar() {
   estado.marcadores = {};
   const verCob = $("#chk-coberturas").checked;
 
-  for (const f of [...porTipo("referencia"), ...porTipo("perimetro"), ...porTipo("muro"), ...porTipo("obstaculo")]) {
+  for (const f of [...porTipo("referencia"), ...porTipo("canalizacion"), ...porTipo("perimetro"), ...porTipo("muro"), ...porTipo("obstaculo")]) {
     const latlngs = (f.geometry.type === "Polygon" ? f.geometry.coordinates[0] : f.geometry.coordinates).map(([lon, lat]) => [lat, lon]);
     const sel = estado.seleccion === f.id, t = f.properties.tipo;
     const estilo = t === "perimetro" ? { color: sel ? "#ffeb3b" : "#ffffff", weight: sel ? 4 : 3, fill: false, dashArray: "6 4" }
       : t === "muro" ? { color: sel ? "#ffeb3b" : "#ff7043", weight: sel ? 6 : 5 }
       : t === "referencia" ? { color: sel ? "#ffeb3b" : "#4dd0e1", weight: sel ? 3 : 1.5, fill: false, opacity: 0.85 }
+      : t === "canalizacion" ? { color: sel ? "#ffeb3b" : f.properties.cruce ? "#d84315" : { aerea: "#b0bec5", pared: "#ce93d8" }[f.properties.tipo_canal] || "#a1887f",
+        weight: f.properties.cruce ? 6 : 4, dashArray: f.properties.cruce ? null : "8 5", fill: false }
       : { color: sel ? "#ffeb3b" : "#78909c", weight: 2, fillColor: "#546e7a", fillOpacity: 0.55 };
     const capa = f.geometry.type === "Polygon" ? L.polygon(latlngs.slice(0, -1), estilo) : L.polyline(latlngs, estilo);
     capa.feature_id = f.id;
@@ -280,6 +282,12 @@ function manija(f, lat, lon) {
 
 function dibujarHuecos() {
   capaHuecos.clearLayers();
+  for (const c of estado.calculo?.obra_civil?.canalizaciones || []) {
+    for (const [lon, lat] of c.camaras_paso) {
+      L.marker([lat, lon], { interactive: false, keyboard: false,
+        icon: L.divIcon({ className: "", html: '<div class="cp-auto"></div>', iconSize: [9, 9] }) }).addTo(capaHuecos);
+    }
+  }
   if (!$("#chk-huecos").checked || !estado.calculo) return;
   for (const h of estado.calculo.cobertura.huecos) {
     L.polyline(h.coords.map(([lon, lat]) => [lat, lon]), { color: "#ff1744", weight: 7, opacity: 0.85 })
@@ -305,6 +313,7 @@ function agregarPunto(tipo, latlng) {
   if (tipo === "gabinete") props.nombre = `GAB M${String(n).padStart(2, "0")}`;
   if (tipo === "central") props.nombre = "Rack central";
   if (tipo === "ups") props.nombre = `UPS ${n}`;
+  if (tipo === "camara_paso") Object.assign(props, { nombre: `CP ${n}`, medida: "40x40" });
   if (tipo === "central" && porTipo("central").length) {
     alert("Ya hay un rack central. Arrastralo para moverlo.");
     return;
@@ -337,20 +346,22 @@ function usarHerramienta(h) {
     gabinete: "Clic en el mapa para ubicar un gabinete.",
     central: "Clic donde va el rack central (sala de monitoreo).",
     ups: "Clic donde hay una fuente de energía / UPS adicional.",
+    canalizacion: "Clic en cada punto del recorrido de la canalización. Clic en el último punto para terminar.",
+    camara_paso: "Clic donde va una cámara de paso. Las de las canalizaciones enterradas se calculan solas.",
     muro: "Clic en cada punto del muro o pared. Clic en el último punto para terminar. Corta la visión de las cámaras.",
     obstaculo: "Clic en cada vértice del obstáculo (edificio, árbol, contenedor). Clic en el primero para cerrar.",
   }[estado.herramienta];
   $("#ayuda-herr").textContent = ayuda || "Elegí una herramienta y hacé clic en el mapa. Los elementos se pueden arrastrar.";
   if (estado.herramienta === "perimetro") mapa.pm.enableDraw("Polygon", { finishOn: null });
-  if (estado.herramienta === "perimetro-abierto" || estado.herramienta === "muro") mapa.pm.enableDraw("Line");
+  if (["perimetro-abierto", "muro", "canalizacion"].includes(estado.herramienta)) mapa.pm.enableDraw("Line");
   if (estado.herramienta === "obstaculo") mapa.pm.enableDraw("Polygon", { finishOn: null });
 }
 
 mapa.on("pm:create", (e) => {
   const gj = e.layer.toGeoJSON().geometry;
   mapa.removeLayer(e.layer);
-  const tipo = ["muro", "obstaculo"].includes(estado.herramienta) ? estado.herramienta : "perimetro";
-  const nombre = { perimetro: "Perímetro", muro: "Muro", obstaculo: "Obstáculo" }[tipo];
+  const tipo = ["muro", "obstaculo", "canalizacion"].includes(estado.herramienta) ? estado.herramienta : "perimetro";
+  const nombre = { perimetro: "Perímetro", muro: "Muro", obstaculo: "Obstáculo", canalizacion: "Canalización" }[tipo];
   const f = { type: "Feature", id: uid(tipo.slice(0, 3)), geometry: gj, properties: { tipo, planta: estado.planta, nombre: `${nombre} ${porTipo(tipo).length + 1}` } };
   estado.escenario.elementos.push(f);
   usarHerramienta(null);
@@ -361,7 +372,7 @@ mapa.on("pm:create", (e) => {
 mapa.on("click", (e) => {
   if (typeof clicCalibracion === "function" && clicCalibracion(e)) return;
   if (estado.soloLectura) return;
-  if (["camara", "gabinete", "central", "ups"].includes(estado.herramienta)) agregarPunto(estado.herramienta, e.latlng);
+  if (["camara", "gabinete", "central", "ups", "camara_paso"].includes(estado.herramienta)) agregarPunto(estado.herramienta, e.latlng);
   else if (!estado.herramienta && estado.seleccion) seleccionar(null);
 });
 
@@ -391,7 +402,7 @@ function inspector() {
   if (!f) return;
   const p = f.properties, cuerpo = $("#inspector-cuerpo");
   let html = `<label>Nombre <input data-prop="nombre" value="${esc(p.nombre || "")}"></label>`;
-  if (f.geometry.type === "Point") html += `
+  if (f.geometry.type === "Point" && p.tipo !== "camara_paso") html += `
       <label>Orientación <span class="etiqueta" id="rumbo">${azimut(f)}° ${rumbo(azimut(f))}</span>
         <input data-prop="azimut" type="range" min="0" max="359" value="${azimut(f)}"></label>
       <div class="fila orientacion">
@@ -418,6 +429,20 @@ function inspector() {
     const g = estado.calculo.gabinetes.find((x) => x.id === f.id);
     if (g) html += `<p class="ayuda">${g.camaras} cámaras · PoE ${fmt(g.poe_w)} W · ${esc(g.switch || "sin switch adecuado")} · UTP máx ${fmt(g.utp_max_m)} m · caída ${fmt(g.caida_pct, 2)}% (${esc(g.fuente || "")})</p>`;
   }
+  if (p.tipo === "canalizacion") {
+    const c = estado.calculo?.obra_civil?.canalizaciones.find((x) => x.id === f.id);
+    const opt = (v, t) => `<option value="${v}" ${(p.tipo_canal || "enterrada") === v ? "selected" : ""}>${t}</option>`;
+    html += `
+      <label>Tipo <select data-prop="tipo_canal">${opt("enterrada", "Enterrada (caño PEAD)")}${opt("aerea", "Aérea sobre cerco o postes")}${opt("pared", "Sobre pared o bandeja")}</select></label>
+      <label>Diámetro (mm) <input data-prop="diametro_mm" type="number" step="1" min="10" placeholder="${esc(param("diametro_canal_mm"))}" value="${esc(p.diametro_mm ?? "")}"></label>
+      <label class="check"><input type="checkbox" data-prop="cruce" ${p.cruce ? "checked" : ""}> Cruce de calzada (perforación o rotura)</label>
+      ${c ? `<p class="ayuda">${fmt(c.largo_m, 1)} m${c.tipo === "enterrada" ? ` · ${c.camaras_paso.length} cámara(s) de paso calculada(s)` : ""}</p>` : ""}
+      <button id="btn-vertices" class="edicion">${estado.editandoVertices ? "Terminar edición" : "Editar vértices"}</button>`;
+  }
+  if (p.tipo === "camara_paso") {
+    const opt = (v) => `<option ${(p.medida || "40x40") === v ? "selected" : ""}>${v}</option>`;
+    html += `<label>Medida (cm) <select data-prop="medida">${["30x30", "40x40", "60x60", "80x80"].map(opt).join("")}</select></label>`;
+  }
   if (p.tipo === "muro" || p.tipo === "obstaculo" || p.tipo === "referencia") {
     html += `<p class="ayuda">${{ muro: "Muro o pared: corta la visión de las cámaras (cálculo en planta, sin altura).", obstaculo: "Obstáculo: corta la visión de las cámaras (cálculo en planta, sin altura).", referencia: "Dibujo de referencia importado: no interviene en los cálculos." }[p.tipo]}</p>
       <button id="btn-vertices" class="edicion">${estado.editandoVertices ? "Terminar edición" : "Editar vértices"}</button>`;
@@ -434,8 +459,8 @@ function inspector() {
 
   cuerpo.querySelectorAll("[data-prop]").forEach((inp) => inp.addEventListener("input", () => {
     const k = inp.dataset.prop;
-    let v = inp.value;
-    if (["azimut", "alcance", "altura_m", "inclinacion"].includes(k)) v = v === "" ? null : Number(v);
+    let v = inp.type === "checkbox" ? (inp.checked || null) : inp.value;
+    if (["azimut", "alcance", "altura_m", "inclinacion", "diametro_mm"].includes(k)) v = v === "" ? null : Number(v);
     if (k === "azimut") { if (v === null) return; girar(f, v); actualizarOrientacionInspector(f, inp); }
     else if (v === null || v === "") delete p[k]; else p[k] = v;
     if (p.tipo === "camara") infoOptica(f);

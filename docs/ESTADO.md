@@ -23,6 +23,18 @@
 Probado: 14 pruebas automáticas y recorrido completo en navegador (configuración, llave, ingreso,
 distribución, duplicar escenario, usuario visor de solo lectura, recuperación y rechazo de la llave usada).
 
+## Etapa 1, parte 4: canalizaciones y cámaras de paso (2026-10-20)
+
+- Herramienta **Canalización** (línea): enterrada (caño PEAD), aérea sobre cerco/postes o sobre pared/bandeja;
+  diámetro (por defecto 40 mm) y marca de **cruce de calzada**.
+- En las enterradas, las cámaras de paso se calculan solas: extremos, quiebres de más de 45° y cada 40 m
+  (parámetros `dist_camaras_paso_m`, `giro_camara_paso`). Se ven como cuadraditos marrones. Las compartidas
+  entre canalizaciones se cuentan una vez; una **Cámara de paso** puesta a mano (con su medida) reemplaza
+  a la automática que esté a menos de 5 m.
+- Listado, categoría "Obra civil": metros de canalización por tipo y diámetro (factor 1,03), zanjeo,
+  cruces de calzada y cámaras de paso por medida.
+- Pendiente: que fibra y energía se tiendan por las canalizaciones dibujadas (hoy van por el cerco).
+
 ## Etapa 1, parte 3: importar KML/KMZ y DXF (2026-10-20)
 
 - "Importar KML, KMZ o DXF": el servidor agrupa la geometría por carpeta (KML) o capa (DXF) y en el
