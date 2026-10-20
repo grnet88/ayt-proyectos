@@ -130,10 +130,25 @@ class Recorrido:
         return d if d <= self.largo / 2 else d - self.largo
 
 
-def en_sector(origen, az, hfov, d_min, d_max, p) -> bool:
+def _cruza(a, b, c, d) -> bool:
+    """True si el segmento a-b cruza el segmento c-d (los toques en el extremo `a` no cuentan)."""
+    def orient(p, q, r):
+        return (q[0] - p[0]) * (r[1] - p[1]) - (q[1] - p[1]) * (r[0] - p[0])
+    o1, o2, o3, o4 = orient(a, b, c), orient(a, b, d), orient(c, d, a), orient(c, d, b)
+    if abs(o3) < 1e-9:  # la cámara está apoyada sobre el muro: no se bloquea a sí misma
+        return False
+    return (o1 > 0) != (o2 > 0) and (o3 > 0) != (o4 > 0)
+
+
+def visible(origen, p, bloqueos) -> bool:
+    """Línea de vista 2D entre `origen` y `p`, cortada por segmentos de muros u obstáculos."""
+    return not any(_cruza(origen, p, c, d) for c, d in bloqueos)
+
+
+def en_sector(origen, az, hfov, d_min, d_max, p, bloqueos=()) -> bool:
     d = dist(origen, p)
     if d < d_min or d > d_max:
         return False
-    if hfov >= 360:
-        return True
-    return dif_angular(azimut(origen, p), az) <= hfov / 2
+    if hfov < 360 and dif_angular(azimut(origen, p), az) > hfov / 2:
+        return False
+    return visible(origen, p, bloqueos) if bloqueos else True

@@ -12,6 +12,7 @@ import uuid
 from collections import Counter, defaultdict
 
 from .geo import Proyeccion, Recorrido, dist, en_sector
+from .optica import NOMBRE_DORI, optica
 
 PARAMETROS_DEFAULT = {
     "modelo_camara_perimetro": "dahua-ipc-hdw3849h-as-pv-28",
@@ -19,7 +20,9 @@ PARAMETROS_DEFAULT = {
     "espaciado_m": None,  # None = 90 % del alcance de analítica del modelo
     "sentido": "trazado",  # "trazado": miran en el sentido en que se dibujó el cerco; "inverso": al revés
     "angulo_quiebre": 25.0,  # giro (°) a partir del cual un vértice es esquina y lleva cámara
-    "dist_min_camara_m": 2.0,  # zona ciega bajo la cámara
+    "dist_min_camara_m": 2.0,  # zona ciega si el modelo no informa ángulo vertical (PTZ, etc.)
+    "altura_camara_m": 4.0,  # altura de montaje por defecto
+    "ppm_minimo": 62.0,  # PPM mínimo en el borde del alcance (62 = observación DORI)
     "muestreo_cobertura_m": 1.0,
     "reserva_utp_m": 5.0,
     "limite_utp_m": 90.0,
@@ -329,16 +332,33 @@ def calcular(proyecto: dict, catalogo: dict[str, dict]) -> dict:
                 adv.append(f"{e['fuente']}: la carga ({req:.0f} VA con margen) supera las UPS del catálogo.")
             energia.append(e)
 
-    # ---------------- cobertura sobre el perímetro
-    cobertura = {"pct": None, "huecos": [], "largo_m": round(sum(r.largo for r in recorridos), 1)}
+    # ---------------- óptica de cada cámara y bloqueos (muros, obstáculos)
+    bloqueos = []
+    for f in _por_tipo(proyecto, "muro") + _por_tipo(proyecto, "obstaculo"):
+        coords, cerrado = _anillo(f)
+        pts = [proj.a_xy(c[1], c[0]) for c in coords]
+        if cerrado and pts and pts[0] != pts[-1]:
+            pts.append(pts[0])
+        bloqueos += list(zip(pts, pts[1:]))
+    det_cam = []
     sectores = []
     for c in camaras:
         m = catalogo.get(c["properties"].get("modelo"))
         if not m:
             continue
-        alcance = c["properties"].get("alcance") or m["alcance_analitica_m"]
+        o = optica(c["properties"], m, p)
+        det_cam.append({"id": c["id"], "nombre": c["properties"].get("nombre", ""), **o})
         sectores.append((u_cam[c["id"]][0], float(c["properties"].get("azimut", 0)), m["hfov"],
-                         p["dist_min_camara_m"], float(alcance)))
+                         o["zona_ciega_m"], o["alcance_efectivo_m"]))
+        if o["ppm_borde"] is not None and o["ppm_borde"] < p["ppm_minimo"]:
+            adv.append(f"{c['properties'].get('nombre', c['id'])}: {o['ppm_borde']} PPM en el borde del alcance "
+                       f"({o['alcance_efectivo_m']} m), por debajo de {p['ppm_minimo']:g}. Acortá el alcance o usá otra lente.")
+        if o["borde_lejano_m"] is not None and o["borde_lejano_m"] < o["alcance_m"] * 0.8:
+            adv.append(f"{c['properties'].get('nombre', c['id'])}: con {o['inclinacion']}° de inclinación ve el piso solo "
+                       f"hasta {o['borde_lejano_m']} m de los {o['alcance_m']:g} m de alcance. Levantala o subí la altura.")
+
+    # ---------------- cobertura sobre el perímetro
+    cobertura = {"pct": None, "huecos": [], "largo_m": round(sum(r.largo for r in recorridos), 1)}
     if recorridos:
         paso = max(0.25, float(p["muestreo_cobertura_m"]))
         cubierto_total = 0.0
@@ -348,7 +368,7 @@ def calcular(proyecto: dict, catalogo: dict[str, dict]) -> dict:
             for i in range(n + (0 if r.cerrado else 1)):
                 s = min(i * paso, r.largo)
                 xy, _ = r.punto(s)
-                estado.append((s, any(en_sector(o, az, hf, dmin, dmax, xy) for o, az, hf, dmin, dmax in sectores)))
+                estado.append((s, any(en_sector(o, az, hf, dmin, dmax, xy, bloqueos) for o, az, hf, dmin, dmax in sectores)))
             cubierto_total += sum(1 for _, ok in estado if ok) / len(estado) * r.largo
             # agrupar huecos contiguos
             hueco = None
@@ -421,5 +441,5 @@ def calcular(proyecto: dict, catalogo: dict[str, dict]) -> dict:
         "mbps_total": red["mbps_total"],
         "almacenamiento_tb": red["almacenamiento_tb"],
     }
-    return {"resumen": resumen, "advertencias": adv, "gabinetes": det_gab, "fibra": fibra,
+    return {"resumen": resumen, "advertencias": adv, "gabinetes": det_gab, "camaras": det_cam, "fibra": fibra,
             "energia": energia, "cobertura": cobertura, "red": red, "materiales": lista, "parametros": p}

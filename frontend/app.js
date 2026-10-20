@@ -30,7 +30,9 @@ const ETIQUETAS_PARAM = {
   limite_caida_pct: "Caída de tensión máxima (%)",
   rho_cobre: "Resistividad cobre (Ω·mm²/m)",
   dias_grabacion: "Días de grabación",
-  dist_min_camara_m: "Zona ciega bajo cámara (m)",
+  altura_camara_m: "Altura de cámaras por defecto (m)",
+  ppm_minimo: "PPM mínimo en el borde del alcance",
+  dist_min_camara_m: "Zona ciega si no hay ángulo vertical (m)",
   reserva_utp_m: "Reserva UTP por cámara (m)",
   limite_utp_m: "Largo máximo UTP (m)",
   factor_fo: "Factor de fibra (recorrido)",
@@ -89,11 +91,62 @@ function destino(lat, lon, rumbo, d) {
   return [lat + ((d * Math.cos(b)) / R) * (180 / Math.PI), lon + ((d * Math.sin(b)) / (R * Math.cos((lat * Math.PI) / 180))) * (180 / Math.PI)];
 }
 
+// Óptica sobre el piso (misma lógica que backend/app/engine/optica.py)
+const tanG = (g) => Math.tan((g * Math.PI) / 180);
+function optica(p, m) {
+  const alcance = Number(p.alcance) || m.alcance_analitica_m || 0;
+  const altura = Number(p.altura_m) || param("altura_camara_m") || 4;
+  const r = { altura, alcance, inclinacion: null, auto: true, ciega: param("dist_min_camara_m"), efectivo: alcance, lejano: null };
+  if (m.hfov < 360 && m.vfov) {
+    const manual = p.inclinacion !== undefined && p.inclinacion !== null && p.inclinacion !== "";
+    const incl = manual ? Number(p.inclinacion) : Math.min(89, (Math.atan2(altura, alcance) * 180) / Math.PI + m.vfov / 2);
+    Object.assign(r, { inclinacion: incl, auto: !manual });
+    const abajo = Math.min(incl + m.vfov / 2, 89.9), arriba = incl - m.vfov / 2;
+    r.ciega = abajo > 0 ? altura / tanG(abajo) : 0;
+    r.lejano = arriba > 0.05 ? altura / tanG(arriba) : null;
+    r.efectivo = Math.max(r.ciega, Math.min(alcance, r.lejano ?? Infinity));
+  }
+  return r;
+}
+
+// Muros y obstáculos como segmentos en metros locales alrededor de (lat0, lon0)
+function bloqueosCerca(lat0, lon0, radio) {
+  const kx = 111320 * Math.cos((lat0 * Math.PI) / 180), ky = 110540, segs = [];
+  for (const f of [...porTipo("muro"), ...porTipo("obstaculo")]) {
+    const c = f.geometry.type === "Polygon" ? f.geometry.coordinates[0] : f.geometry.coordinates;
+    const pts = c.map(([lon, lat]) => [(lon - lon0) * kx, (lat - lat0) * ky]);
+    for (let i = 0; i + 1 < pts.length; i++) {
+      const [a, b] = [pts[i], pts[i + 1]];
+      if (Math.min(Math.hypot(...a), Math.hypot(...b)) < radio + Math.hypot(b[0] - a[0], b[1] - a[1])) segs.push([a, b]);
+    }
+  }
+  return segs;
+}
+
+// distancia hasta el primer corte del rayo con rumbo `az` (grados) contra los segmentos
+function corteRayo(az, segs, rmax) {
+  const dx = Math.sin((az * Math.PI) / 180), dy = Math.cos((az * Math.PI) / 180);
+  let t = rmax;
+  for (const [[ax, ay], [bx, by]] of segs) {
+    const ex = bx - ax, ey = by - ay, den = dx * ey - dy * ex;
+    if (Math.abs(den) < 1e-9) continue;
+    const u = (ax * ey - ay * ex) / den, v = (ax * dy - ay * dx) / den;
+    if (u > 0.05 && v >= 0 && v <= 1 && u < t) t = u;
+  }
+  return t;
+}
+
 function sector(lat, lon, az, hfov, r, rmin) {
-  if (hfov >= 360) return null;
-  const pts = [], pasos = Math.max(8, Math.round(hfov / 4));
-  for (let i = 0; i <= pasos; i++) pts.push(destino(lat, lon, az - hfov / 2 + (hfov * i) / pasos, r));
-  for (let i = pasos; i >= 0; i--) pts.push(destino(lat, lon, az - hfov / 2 + (hfov * i) / pasos, rmin));
+  const segs = bloqueosCerca(lat, lon, r);
+  const completo = hfov >= 360;
+  if (completo && !segs.length) return null;
+  const abertura = completo ? 360 : hfov, pasos = Math.max(8, Math.round(abertura / (segs.length ? 1.5 : 4)));
+  const pts = [];
+  for (let i = 0; i <= pasos; i++) {
+    const a = az - abertura / 2 + (abertura * i) / pasos;
+    pts.push(destino(lat, lon, a, Math.max(rmin, corteRayo(a, segs, r))));
+  }
+  if (!completo) for (let i = pasos; i >= 0; i--) pts.push(destino(lat, lon, az - hfov / 2 + (hfov * i) / pasos, rmin));
   return pts;
 }
 
@@ -149,10 +202,12 @@ function dibujar() {
   estado.marcadores = {};
   const verCob = $("#chk-coberturas").checked;
 
-  for (const f of porTipo("perimetro")) {
+  for (const f of [...porTipo("perimetro"), ...porTipo("muro"), ...porTipo("obstaculo")]) {
     const latlngs = (f.geometry.type === "Polygon" ? f.geometry.coordinates[0] : f.geometry.coordinates).map(([lon, lat]) => [lat, lon]);
-    const sel = estado.seleccion === f.id;
-    const estilo = { color: sel ? "#ffeb3b" : "#ffffff", weight: sel ? 4 : 3, fill: false, dashArray: "6 4" };
+    const sel = estado.seleccion === f.id, t = f.properties.tipo;
+    const estilo = t === "perimetro" ? { color: sel ? "#ffeb3b" : "#ffffff", weight: sel ? 4 : 3, fill: false, dashArray: "6 4" }
+      : t === "muro" ? { color: sel ? "#ffeb3b" : "#ff7043", weight: sel ? 6 : 5 }
+      : { color: sel ? "#ffeb3b" : "#78909c", weight: 2, fillColor: "#546e7a", fillOpacity: 0.55 };
     const capa = f.geometry.type === "Polygon" ? L.polygon(latlngs.slice(0, -1), estilo) : L.polyline(latlngs, estilo);
     capa.feature_id = f.id;
     capa.on("click", (e) => { L.DomEvent.stopPropagation(e); seleccionar(f.id); });
@@ -180,12 +235,12 @@ function dibujar() {
     if (f.properties.tipo === "camara" && verCob) {
       const m = estado.catalogo[f.properties.modelo];
       if (m) {
-        const r = Number(f.properties.alcance) || m.alcance_analitica_m;
+        const o = optica(f.properties, m), r = o.efectivo;
         const color = m.tipo === "ptz" ? "#26a69a" : m.tipo === "lpr" ? "#a1887f" : "#42a5f5";
-        const pts = sector(lat, lon, Number(f.properties.azimut) || 0, m.hfov, r, param("dist_min_camara_m"));
+        const pts = sector(lat, lon, Number(f.properties.azimut) || 0, m.hfov, r, o.ciega);
         const opciones = { color, weight: 1, fillOpacity: 0.18, interactive: false };
         const capa = (pts ? L.polygon(pts, opciones) : L.circle([lat, lon], { ...opciones, radius: r, dashArray: "4 4" })).addTo(capaSectores);
-        if (pts) capa.actualizar = (az) => capa.setLatLngs(sector(lat, lon, az, m.hfov, r, param("dist_min_camara_m")));
+        if (pts) capa.actualizar = (az) => capa.setLatLngs(sector(lat, lon, az, m.hfov, r, o.ciega));
         estado.capasSector[f.id] = capa;
       }
     }
@@ -281,16 +336,21 @@ function usarHerramienta(h) {
     gabinete: "Clic en el mapa para ubicar un gabinete.",
     central: "Clic donde va el rack central (sala de monitoreo).",
     ups: "Clic donde hay una fuente de energía / UPS adicional.",
+    muro: "Clic en cada punto del muro o pared. Clic en el último punto para terminar. Corta la visión de las cámaras.",
+    obstaculo: "Clic en cada vértice del obstáculo (edificio, árbol, contenedor). Clic en el primero para cerrar.",
   }[estado.herramienta];
   $("#ayuda-herr").textContent = ayuda || "Elegí una herramienta y hacé clic en el mapa. Los elementos se pueden arrastrar.";
   if (estado.herramienta === "perimetro") mapa.pm.enableDraw("Polygon", { finishOn: null });
-  if (estado.herramienta === "perimetro-abierto") mapa.pm.enableDraw("Line");
+  if (estado.herramienta === "perimetro-abierto" || estado.herramienta === "muro") mapa.pm.enableDraw("Line");
+  if (estado.herramienta === "obstaculo") mapa.pm.enableDraw("Polygon", { finishOn: null });
 }
 
 mapa.on("pm:create", (e) => {
   const gj = e.layer.toGeoJSON().geometry;
   mapa.removeLayer(e.layer);
-  const f = { type: "Feature", id: uid("per"), geometry: gj, properties: { tipo: "perimetro", planta: estado.planta, nombre: `Perímetro ${porTipo("perimetro").length + 1}` } };
+  const tipo = ["muro", "obstaculo"].includes(estado.herramienta) ? estado.herramienta : "perimetro";
+  const nombre = { perimetro: "Perímetro", muro: "Muro", obstaculo: "Obstáculo" }[tipo];
+  const f = { type: "Feature", id: uid(tipo.slice(0, 3)), geometry: gj, properties: { tipo, planta: estado.planta, nombre: `${nombre} ${porTipo(tipo).length + 1}` } };
   estado.escenario.elementos.push(f);
   usarHerramienta(null);
   seleccionar(f.id);
@@ -344,12 +404,21 @@ function inspector() {
     html += `
       <label>Modelo <select data-prop="modelo">${opcionesModelos("camara", p.modelo)}</select></label>
       <label>Alcance analítica (m) <input data-prop="alcance" type="number" step="0.5" placeholder="${esc(m.alcance_analitica_m ?? "")} (del modelo)" value="${esc(p.alcance ?? "")}"></label>
+      <div class="fila">
+        <label>Altura (m) <input data-prop="altura_m" type="number" step="0.1" min="0.5" placeholder="${esc(param("altura_camara_m"))}" value="${esc(p.altura_m ?? "")}"></label>
+        <label>Inclinación (°) <input data-prop="inclinacion" type="number" step="0.5" min="0" max="90" placeholder="auto" value="${esc(p.inclinacion ?? "")}"></label>
+      </div>
+      <p class="ayuda" id="info-optica"></p>
       <label>Gabinete <select data-prop="gabinete"><option value="">Más cercano</option>${gabs}</select></label>
       <p class="ayuda">Ángulo ${fmt(m.hfov)}° · DORI D/O/R/I ${fmt(m.dori?.d, 1)} / ${fmt(m.dori?.o, 1)} / ${fmt(m.dori?.r, 1)} / ${fmt(m.dori?.i, 1)} m · IR ${fmt(m.ir_m)} m · ${fmt(m.consumo_w, 1)} W</p>`;
   }
   if (p.tipo === "gabinete" && estado.calculo) {
     const g = estado.calculo.gabinetes.find((x) => x.id === f.id);
     if (g) html += `<p class="ayuda">${g.camaras} cámaras · PoE ${fmt(g.poe_w)} W · ${esc(g.switch || "sin switch adecuado")} · UTP máx ${fmt(g.utp_max_m)} m · caída ${fmt(g.caida_pct, 2)}% (${esc(g.fuente || "")})</p>`;
+  }
+  if (p.tipo === "muro" || p.tipo === "obstaculo") {
+    html += `<p class="ayuda">${p.tipo === "muro" ? "Muro o pared" : "Obstáculo"}: corta la visión de las cámaras (cálculo en planta, sin altura).</p>
+      <button id="btn-vertices" class="edicion">${estado.editandoVertices ? "Terminar edición" : "Editar vértices"}</button>`;
   }
   if (p.tipo === "perimetro") {
     const c = estado.calculo?.cobertura;
@@ -364,13 +433,15 @@ function inspector() {
   cuerpo.querySelectorAll("[data-prop]").forEach((inp) => inp.addEventListener("input", () => {
     const k = inp.dataset.prop;
     let v = inp.value;
-    if (["azimut", "alcance"].includes(k)) v = v === "" ? null : Number(v);
+    if (["azimut", "alcance", "altura_m", "inclinacion"].includes(k)) v = v === "" ? null : Number(v);
     if (k === "azimut") { if (v === null) return; girar(f, v); actualizarOrientacionInspector(f, inp); }
     else if (v === null || v === "") delete p[k]; else p[k] = v;
+    if (p.tipo === "camara") infoOptica(f);
     delete p.auto;
     dibujar();
     cambio();
   }));
+  if (p.tipo === "camara") infoOptica(f);
   cuerpo.querySelectorAll("[data-girar]").forEach((b) => b.onclick = () => {
     girar(f, azimut(f) + Number(b.dataset.girar));
     actualizarOrientacionInspector(f);
@@ -380,6 +451,17 @@ function inspector() {
   cuerpo.querySelector("#btn-borrar-el").onclick = () => borrar(f.id);
   const bv = cuerpo.querySelector("#btn-vertices");
   if (bv) bv.onclick = () => { estado.editandoVertices = !estado.editandoVertices; dibujar(); inspector(); };
+}
+
+function infoOptica(f) {
+  const m = estado.catalogo[f.properties.modelo], el = $("#info-optica");
+  if (!m || !el) return;
+  const o = optica(f.properties, m);
+  const ppm = m.resolucion_h && m.hfov < 180 ? m.resolucion_h / (2 * o.efectivo * tanG(m.hfov / 2)) : m.dori?.i ? (250 * m.dori.i) / o.efectivo : null;
+  const inc = o.inclinacion === null ? "" : `Inclinación ${fmt(o.inclinacion, 1)}°${o.auto ? " (automática)" : ""} · `;
+  el.innerHTML = `${inc}zona ciega ${fmt(o.ciega, 1)} m · cubre hasta ${fmt(o.efectivo, 1)} m` +
+    (ppm ? ` · <b>${fmt(ppm, 0)} PPM</b> en el borde` : "") +
+    (o.lejano !== null && o.lejano < o.alcance * 0.8 ? ` · <span style="color:var(--aviso)">mira al piso: el alcance queda corto</span>` : "");
 }
 
 function actualizarOrientacionInspector(f, excepto) {

@@ -23,6 +23,17 @@
 Probado: 14 pruebas automáticas y recorrido completo en navegador (configuración, llave, ingreso,
 distribución, duplicar escenario, usuario visor de solo lectura, recuperación y rechazo de la llave usada).
 
+## Etapa 1, parte 1: óptica y obstáculos (2026-10-20)
+
+- Cada cámara tiene altura (`altura_m`, por defecto 4 m) e inclinación (`inclinacion`, grados bajo la horizontal).
+  Sin inclinación cargada se usa la automática: el borde superior del campo vertical toca el piso en el alcance.
+- Con eso se calculan la zona ciega real bajo la cámara, el alcance efectivo sobre el piso y los PPM en el
+  borde (por resolución si el modelo la tiene, o por el DORI del datasheet: identificación = 250 PPM).
+  Avisos: PPM por debajo del mínimo (parámetro, 62 = observación) y cámara que mira demasiado al piso.
+- Herramientas Muro / pared (línea) y Obstáculo (polígono): cortan la línea de vista en planta. El cono
+  se recorta en el mapa y la cobertura del perímetro los tiene en cuenta.
+- Motor: `backend/app/engine/optica.py`, `geo.visible`; pruebas en `tests/test_optica.py`.
+
 ## Orientación de dispositivos (2026-10-20)
 
 - Todo elemento puntual (cámara, gabinete, rack, UPS) tiene orientación: `properties.azimut`, grados enteros
